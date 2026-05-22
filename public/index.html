@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Claude Hub</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.min.css" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<div id="app">
+
+  <!-- ── Sidebar ── -->
+  <aside id="sidebar">
+    <div id="sidebar-header">
+      <span class="logo">⚡ Claude Hub</span>
+      <button id="btn-new-agent" title="New Agent">＋</button>
+    </div>
+    <div id="agent-list-wrap">
+      <ul id="agent-list"></ul>
+    </div>
+  </aside>
+
+  <!-- ── Main panel ── -->
+  <main id="main">
+    <div id="toolbar">
+      <button id="btn-sidebar-toggle" class="icon-btn" title="菜单">☰</button>
+      <span id="agent-label">未选择 Agent</span>
+      <span id="agent-type-badge" class="badge hidden"></span>
+      <button id="btn-attach" class="icon-btn" title="附件">📎</button>
+      <input id="file-input" type="file" accept="image/*,.pdf,.txt,.js,.ts,.py,.json,.md" multiple style="display:none" />
+      <span id="conn-dot" class="status-dot disconnected"></span>
+    </div>
+
+    <!-- xterm terminal -->
+    <div id="terminal-wrap">
+      <div id="terminal"></div>
+    </div>
+
+    <!-- Mobile-friendly input bar -->
+    <div id="input-bar">
+      <textarea id="msg-input" rows="1" placeholder="输入消息… Enter 发送"></textarea>
+      <button id="btn-send" class="primary-btn">↑</button>
+    </div>
+  </main>
+
+</div>
+
+<!-- ── New Agent modal ── -->
+<div id="modal-overlay" class="modal-backdrop hidden">
+  <div id="modal">
+    <h3>新建 Agent</h3>
+    <label>名称<input id="modal-name" type="text" placeholder="e.g. Master" /></label>
+    <label>类型
+      <select id="modal-type">
+        <option value="worker">Worker</option>
+        <option value="master">Master</option>
+      </select>
+    </label>
+    <label>工作目录<input id="modal-cwd" type="text" value="/tmp" /></label>
+    <label>适配器
+      <select id="modal-adapter">
+        <option value="claude-code">claude-code</option>
+        <option value="mock">mock</option>
+      </select>
+    </label>
+    <div class="modal-actions">
+      <button id="modal-cancel">取消</button>
+      <button id="modal-confirm" class="primary-btn">创建</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

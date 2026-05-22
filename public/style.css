@@ -1,0 +1,80 @@
+/* ── Reset ── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+.hidden { display: none !important; }
+html, body, #app { height: 100%; background: #1e1e2e; color: #cdd6f4;
+  font-family: -apple-system, system-ui, sans-serif; font-size: 14px; }
+#app { display: flex; overflow: hidden; }
+
+/* ── Sidebar ── */
+#sidebar { width: 200px; background: #181825; display: flex; flex-direction: column;
+  border-right: 1px solid #313244; flex-shrink: 0; transition: transform .2s; z-index: 20; }
+#sidebar-header { display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 10px; border-bottom: 1px solid #313244; }
+.logo { font-weight: 700; font-size: 14px; color: #cba6f7; }
+#btn-new-agent { background: #313244; border: none; color: #cdd6f4; cursor: pointer;
+  border-radius: 6px; width: 28px; height: 28px; font-size: 16px; }
+#agent-list-wrap { flex: 1; overflow-y: auto; }
+#agent-list { list-style: none; }
+#agent-list li { padding: 10px 12px; cursor: pointer; border-left: 3px solid transparent; }
+#agent-list li:hover { background: #27273a; }
+#agent-list li.active { border-left-color: #cba6f7; background: #2a2a3e; }
+.agent-name { font-weight: 600; color: #cdd6f4; font-size: 13px; }
+.agent-meta { font-size: 11px; color: #6c7086; margin-top: 2px; }
+.agent-meta .alive { color: #a6e3a1; }
+.agent-meta .master-tag { color: #f9e2af; font-weight: 600; }
+
+/* ── Main ── */
+#main { flex: 1; display: flex; flex-direction: column; min-width: 0; overflow: hidden; }
+#toolbar { display: flex; align-items: center; gap: 6px; padding: 6px 10px;
+  background: #181825; border-bottom: 1px solid #313244; flex-shrink: 0; }
+#agent-label { font-size: 13px; color: #a6adc8; font-weight: 600; flex: 1; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; }
+.icon-btn { background: transparent; border: none; color: #a6adc8; cursor: pointer;
+  border-radius: 6px; padding: 4px 8px; font-size: 16px; }
+.icon-btn:hover { background: #313244; }
+.badge { font-size: 10px; padding: 1px 6px; border-radius: 99px; font-weight: 700; }
+.badge.master { background: #f9e2af; color: #1e1e2e; }
+.badge.worker { background: #89dceb; color: #1e1e2e; }
+.status-dot { width: 8px; height: 8px; border-radius: 50%; }
+.status-dot.connected { background: #a6e3a1; }
+.status-dot.disconnected { background: #f38ba8; }
+
+/* ── Terminal ── */
+#terminal-wrap { flex: 1; min-height: 0; overflow: hidden; }
+#terminal { height: 100%; }
+
+/* ── Input bar (for mobile-friendly text entry) ── */
+#input-bar { display: flex; gap: 6px; padding: 6px 10px;
+  background: #181825; border-top: 1px solid #313244; flex-shrink: 0; }
+#msg-input { flex: 1; background: #27273a; color: #cdd6f4; border: 1px solid #45475a;
+  border-radius: 8px; padding: 8px 12px; font-size: 14px; resize: none; outline: none;
+  font-family: inherit; line-height: 1.4; max-height: 120px; }
+#msg-input:focus { border-color: #cba6f7; }
+.primary-btn { background: #cba6f7; color: #1e1e2e; border: none; border-radius: 8px;
+  padding: 0 14px; font-weight: 700; cursor: pointer; font-size: 16px; min-height: 36px; }
+
+/* ── Modals ── */
+.modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.6);
+  display: flex; align-items: center; justify-content: center; z-index: 100; }
+#modal { background: #1e1e2e; border: 1px solid #45475a; border-radius: 14px;
+  padding: 20px; width: 320px; max-width: 90vw; }
+#modal h3 { margin-bottom: 14px; color: #cba6f7; font-size: 15px; }
+#modal label { display: flex; flex-direction: column; gap: 4px; font-size: 12px;
+  color: #a6adc8; margin-bottom: 10px; }
+#modal input, #modal select { background: #27273a; color: #cdd6f4; border: 1px solid #45475a;
+  border-radius: 6px; padding: 8px 10px; font-size: 14px; outline: none; }
+.modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+.modal-actions button { padding: 8px 16px; border-radius: 8px; border: none; cursor: pointer;
+  font-size: 13px; background: #313244; color: #cdd6f4; }
+
+/* ── Mobile ── */
+@media (max-width: 768px) {
+  #sidebar { position: fixed; left: 0; top: 0; height: 100%; transform: translateX(-100%); }
+  #sidebar.open { transform: translateX(0); }
+  #btn-sidebar-toggle { display: block; }
+  #terminal-wrap { padding: 0; }
+  .xterm { font-size: 12px !important; }
+}
+@media (min-width: 769px) {
+  #btn-sidebar-toggle { display: none; }
+}
