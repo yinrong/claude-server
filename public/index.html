@@ -46,6 +46,12 @@
 
 </div>
 
+<!-- ── Right-click context menu ── -->
+<div id="context-menu" class="hidden">
+  <div id="ctx-agent-name" class="ctx-label"></div>
+  <button id="ctx-delete" class="ctx-item danger">🗑 删除 Agent</button>
+</div>
+
 <!-- ── New Agent modal ── -->
 <div id="modal-overlay" class="modal-backdrop hidden">
   <div id="modal">
@@ -57,7 +63,10 @@
         <option value="master">Master</option>
       </select>
     </label>
-    <label>工作目录<input id="modal-cwd" type="text" value="/tmp" /></label>
+    <label>工作目录<input id="modal-cwd" type="text" value="/home" /></label>
+    <div id="browse-wrap">
+      <ul id="browse-list"></ul>
+    </div>
     <label>适配器
       <select id="modal-adapter">
         <option value="claude-code">claude-code</option>

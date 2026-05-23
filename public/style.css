@@ -67,6 +67,26 @@ html, body, #app { height: 100%; background: #1e1e2e; color: #cdd6f4;
 .modal-actions button { padding: 8px 16px; border-radius: 8px; border: none; cursor: pointer;
   font-size: 13px; background: #313244; color: #cdd6f4; }
 
+/* ── Context menu ── */
+#context-menu { position: fixed; background: #1e1e2e; border: 1px solid #45475a;
+  border-radius: 8px; padding: 6px 0; z-index: 200; min-width: 160px; box-shadow: 0 4px 16px rgba(0,0,0,.4); }
+.ctx-label { padding: 6px 14px; font-size: 11px; color: #6c7086; border-bottom: 1px solid #313244; }
+.ctx-item { display: block; width: 100%; text-align: left; padding: 8px 14px; border: none;
+  background: none; color: #cdd6f4; font-size: 13px; cursor: pointer; }
+.ctx-item:hover { background: #313244; }
+.ctx-item.danger { color: #f38ba8; }
+.ctx-item.danger:hover { background: #3d2030; }
+
+/* ── Directory browser ── */
+#browse-wrap { max-height: 180px; overflow-y: auto; border: 1px solid #45475a;
+  border-radius: 6px; background: #11111b; margin-bottom: 10px; }
+#browse-list { list-style: none; }
+#browse-list li { padding: 6px 12px; cursor: pointer; font-size: 13px; color: #89b4fa; }
+#browse-list li:hover { background: #27273a; }
+
+/* ── Waiting status ── */
+.agent-meta .waiting { color: #f9e2af; }
+
 /* ── Mobile ── */
 @media (max-width: 768px) {
   #sidebar { position: fixed; left: 0; top: 0; height: 100%; transform: translateX(-100%); }

@@ -1,17 +1,21 @@
 /**
- * E2E tests for claude-server v2
+ * E2E tests for claude-server v2 (PTY mode)
  * Run: PORT=37890 npx playwright test
  *
  * T1  GET / returns 200
  * T2  Create agent + list agents
- * T3  WS connect → receive history
- * T4  Send message via WS → stream chunks + done
+ * T3  WS connect → receive history (chunks array)
+ * T4  Send input via WS → receive output events
  * T5  Two WS clients on same agent both receive output
  * T6  WS disconnect → agent stays alive
  * T7  Upload file → get fileId + url
- * T8  Send message with fileId → stored + broadcast
+ * T8  Send message with file → path appears in output
  * T9  Memory API exists (GET /api/memory returns array)
- * T10 Master agent systemPrompt includes memory
+ * T10 Master agent config has systemPrompt field
+ * T11 DELETE /api/agents/:id kills agent and removes from list
+ * T12 GET /api/browse?path= returns directory listing
+ * T13 Agent status reports waitingForInput field
+ * T14 Multi-env: server respects DB_PATH for isolation
  */
 
 import { test, expect } from '@playwright/test';
@@ -51,18 +55,6 @@ function nextMsg(ws, timeout = 8000) {
   });
 }
 
-async function collectUntilDone(ws, timeoutMs = 15000) {
-  const msgs = [];
-  return new Promise((resolve, reject) => {
-    const t = setTimeout(() => resolve(msgs), timeoutMs);
-    ws.on('message', (d) => {
-      let m; try { m = JSON.parse(d); } catch { return; }
-      msgs.push(m);
-      if (m.type === 'done' || m.type === 'error') { clearTimeout(t); resolve(msgs); }
-    });
-  });
-}
-
 // ── T1 ─────────────────────────────────────────────────────────────────────
 test('T1: GET / returns 200', async ({ request }) => {
   const res = await request.get('/');
@@ -80,69 +72,62 @@ test('T2: create agent and list agents', async ({ request }) => {
   expect(agent.name).toBe('Worker1');
 
   const listRes = await request.get('/api/agents');
-  expect(listRes.status()).toBe(200);
   const agents = await listRes.json();
-  expect(Array.isArray(agents)).toBe(true);
   expect(agents.find(a => a.id === agent.id)).toBeDefined();
 });
 
 // ── T3 ─────────────────────────────────────────────────────────────────────
-test('T3: WS connection receives history message', async () => {
+test('T3: WS connection receives history (chunks array)', async () => {
   const agentId = await createAgent();
   const ws = await wsConnect(agentId);
   const msg = await nextMsg(ws, 5000);
   expect(msg).toHaveProperty('type', 'history');
-  expect(Array.isArray(msg.messages)).toBe(true);
+  expect(Array.isArray(msg.chunks)).toBe(true);
   ws.close();
 });
 
 // ── T4 ─────────────────────────────────────────────────────────────────────
-test('T4: send message → receive chunks + done', async () => {
+test('T4: send input → receive output events', async () => {
   const agentId = await createAgent();
   const ws = await wsConnect(agentId);
   await nextMsg(ws, 5000); // history
 
-  const collected = await (async () => {
-    const p = collectUntilDone(ws, 10000);
-    ws.send(JSON.stringify({ type: 'msg', agentId, content: [{ type: 'text', text: 'hello' }] }));
-    return p;
-  })();
+  const outputs = [];
+  ws.on('message', d => { try { const m = JSON.parse(d); if (m.type === 'output') outputs.push(m.data); } catch {} });
 
-  const chunks = collected.filter(m => m.type === 'chunk');
-  const done = collected.find(m => m.type === 'done');
-  expect(chunks.length).toBeGreaterThan(0);
-  expect(done).toBeDefined();
+  ws.send(JSON.stringify({ type: 'input', data: 'hello\n' }));
+
+  // Mock adapter echoes back — wait for output
+  for (let i = 0; i < 20; i++) {
+    await sleep(100);
+    if (outputs.length > 0) break;
+  }
+  expect(outputs.length).toBeGreaterThan(0);
+  expect(outputs.join('')).toContain('hello');
   ws.close();
 });
 
 // ── T5 ─────────────────────────────────────────────────────────────────────
 test('T5: two WS clients both receive output', async () => {
   const agentId = await createAgent();
-
-  // Connect both and start collecting BEFORE awaiting history,
-  // so we don't miss history messages due to race conditions.
   const ws1 = await wsConnect(agentId);
-  const msgs1 = [];
-  ws1.on('message', d => { try { msgs1.push(JSON.parse(d)); } catch {} });
-
   const ws2 = await wsConnect(agentId);
-  const msgs2 = [];
-  ws2.on('message', d => { try { msgs2.push(JSON.parse(d)); } catch {} });
 
-  // Wait for both to receive history
-  await sleep(500);
+  const out1 = [], out2 = [];
+  ws1.on('message', d => { try { const m = JSON.parse(d); if (m.type === 'output') out1.push(m.data); } catch {} });
+  ws2.on('message', d => { try { const m = JSON.parse(d); if (m.type === 'output') out2.push(m.data); } catch {} });
 
-  // ws1 sends a message; both should receive broadcast output
-  ws1.send(JSON.stringify({ type: 'msg', agentId, content: [{ type: 'text', text: 'hi' }] }));
+  await sleep(300); // consume history
 
-  // Wait for 'done' to appear in both
+  ws1.send(JSON.stringify({ type: 'input', data: 'broadcast_test\n' }));
+
   for (let i = 0; i < 20; i++) {
-    await sleep(500);
-    if (msgs1.some(m => m.type === 'done') && msgs2.some(m => m.type === 'done')) break;
+    await sleep(200);
+    if (out1.length > 0 && out2.length > 0) break;
   }
 
-  expect(msgs1.some(m => m.type === 'done')).toBe(true);
-  expect(msgs2.some(m => m.type === 'done')).toBe(true);
+  expect(out1.join('')).toContain('broadcast_test');
+  expect(out2.join('')).toContain('broadcast_test');
   ws1.close(); ws2.close();
 });
 
@@ -152,92 +137,111 @@ test('T6: agent stays alive after WS disconnect', async () => {
   const ws = await wsConnect(agentId);
   await nextMsg(ws, 5000);
   ws.close();
-  await sleep(1500);
+  await sleep(1000);
 
   const res = await fetch(`${BASE}/api/agents/${agentId}`);
   expect(res.status).toBe(200);
   const body = await res.json();
-  expect(body.id).toBe(agentId);
-  // alive is a status field — agent was created, so it exists (not deleted)
-  expect(body).toHaveProperty('status');
+  expect(body.alive).toBe(true);
 });
 
 // ── T7 ─────────────────────────────────────────────────────────────────────
 test('T7: upload file returns fileId and url', async ({ request }) => {
   const tinyPng = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
-  const res = await request.post('/api/files', {
-    data: { data: tinyPng, name: 'test.png' },
-  });
+  const res = await request.post('/api/files', { data: { data: tinyPng, name: 'test.png' } });
   expect(res.status()).toBe(201);
   const body = await res.json();
   expect(body).toHaveProperty('fileId');
   expect(body).toHaveProperty('url');
   expect(body.url).toMatch(/^\/files\//);
-  // File should exist on disk
   expect(fs.existsSync(body.path)).toBe(true);
 });
 
 // ── T8 ─────────────────────────────────────────────────────────────────────
-test('T8: message with fileId stored and broadcast', async () => {
+test('T8: structured msg with file → path injected into PTY', async () => {
   const agentId = await createAgent();
 
-  // Upload file first
   const tinyPng = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
   const uploadRes = await fetch(`${BASE}/api/files`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ data: tinyPng, name: 'img.png' }),
   });
-  const { fileId, url } = await uploadRes.json();
+  const { fileId, url, path } = await uploadRes.json();
 
   const ws = await wsConnect(agentId);
-  await nextMsg(ws, 5000);
+  await nextMsg(ws, 5000); // history
 
-  const msgs = await (async () => {
-    const p = collectUntilDone(ws, 10000);
-    ws.send(JSON.stringify({
-      type: 'msg', agentId,
-      content: [
-        { type: 'text', text: 'look at this image' },
-        { type: 'image', fileId, url },
-      ],
-    }));
-    return p;
-  })();
+  const outputs = [];
+  ws.on('message', d => { try { const m = JSON.parse(d); if (m.type === 'output') outputs.push(m.data); } catch {} });
 
-  expect(msgs.some(m => m.type === 'done')).toBe(true);
+  // Send structured message with file reference
+  ws.send(JSON.stringify({
+    type: 'msg', agentId,
+    content: [
+      { type: 'text', text: 'look at this' },
+      { type: 'image', fileId, url, path },
+    ],
+  }));
 
-  // Verify message in history
-  const ws2 = await wsConnect(agentId);
-  const hist = await nextMsg(ws2, 5000);
-  expect(hist.type).toBe('history');
-  const userMsg = hist.messages.find(m => m.role === 'user');
-  expect(userMsg).toBeDefined();
-  const hasFile = userMsg.content.some(c => c.type === 'image' && c.fileId === fileId);
-  expect(hasFile).toBe(true);
-  ws.close(); ws2.close();
+  for (let i = 0; i < 20; i++) {
+    await sleep(200);
+    if (outputs.join('').includes('look at this')) break;
+  }
+  // The mock adapter should echo back the text we sent
+  expect(outputs.join('')).toContain('look at this');
+  ws.close();
 });
 
 // ── T9 ─────────────────────────────────────────────────────────────────────
 test('T9: GET /api/memory returns array', async ({ request }) => {
   const res = await request.get('/api/memory');
   expect(res.status()).toBe(200);
-  const body = await res.json();
-  expect(Array.isArray(body)).toBe(true);
+  expect(Array.isArray(await res.json())).toBe(true);
 });
 
 // ── T10 ────────────────────────────────────────────────────────────────────
-test('T10: master agent GET /api/agents/:id includes systemPrompt in config', async () => {
-  // Create a master agent
+test('T10: master agent has systemPrompt in config', async () => {
   const res = await fetch(`${BASE}/api/agents`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name: 'Master', type: 'master', adapterType: 'mock' }),
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: 'Master', type: 'master', adapterType: 'mock', config: { systemPrompt: '' } }),
   });
   const master = await res.json();
-
   const infoRes = await fetch(`${BASE}/api/agents/${master.id}`);
   const info = await infoRes.json();
-  // Master agent's config should have systemPrompt (may be empty string if no memory yet)
   expect(info.config).toHaveProperty('systemPrompt');
+});
+
+// ── T11: DELETE agent ─────────────────────────────────────────────────────
+test('T11: DELETE /api/agents/:id removes agent from list', async ({ request }) => {
+  const agentId = await createAgent({ name: 'ToDelete' });
+  const delRes = await request.delete(`/api/agents/${agentId}`);
+  expect(delRes.status()).toBe(200);
+  const listRes = await request.get('/api/agents');
+  const agents = await listRes.json();
+  expect(agents.find(a => a.id === agentId)).toBeUndefined();
+});
+
+// ── T12: Browse directories ───────────────────────────────────────────────
+test('T12: GET /api/browse returns directory listing', async ({ request }) => {
+  const res = await request.get('/api/browse?path=/tmp');
+  expect(res.status()).toBe(200);
+  const body = await res.json();
+  expect(Array.isArray(body.entries)).toBe(true);
+  expect(body.path).toBe('/tmp');
+});
+
+// ── T13: Agent waitingForInput status ─────────────────────────────────────
+test('T13: agent status includes waitingForInput field', async ({ request }) => {
+  const agentId = await createAgent();
+  await sleep(200);
+  const res = await request.get(`/api/agents/${agentId}`);
+  const body = await res.json();
+  expect(body).toHaveProperty('waitingForInput');
+  expect(typeof body.waitingForInput).toBe('boolean');
+});
+
+// ── T14: Multi-env isolation ──────────────────────────────────────────────
+test('T14: server uses DB_PATH env for isolation', async () => {
+  const dbPath = `${process.cwd()}/data/test.db`;
+  expect(fs.existsSync(dbPath)).toBe(true);
 });

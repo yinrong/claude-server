@@ -100,6 +100,14 @@ export function setAgentConfig(id, config) {
   updateAgentConfig.run(JSON.stringify(config), id);
 }
 
+const deleteAgentStmt = db.prepare('DELETE FROM agents WHERE id = ?');
+const deleteAgentOutput = db.prepare('DELETE FROM output_buffer WHERE agent_id = ?');
+
+export function deleteAgentFromDB(id) {
+  deleteAgentOutput.run(id);
+  deleteAgentStmt.run(id);
+}
+
 // ── Messages ───────────────────────────────────────────────────────────────
 
 const MAX_MSG_PER_AGENT = 2000;

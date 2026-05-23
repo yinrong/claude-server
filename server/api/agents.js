@@ -29,9 +29,9 @@ router.get('/:id', (req, res) => {
   res.json(agent);
 });
 
-// DELETE /api/agents/:id  (stops and removes from registry)
-router.delete('/:id', (_req, res) => {
-  // Simple: just acknowledge; adapter cleanup on next GC
+// DELETE /api/agents/:id
+router.delete('/:id', (req, res) => {
+  agentManager.deleteAgent(req.params.id);
   res.json({ ok: true });
 });
 

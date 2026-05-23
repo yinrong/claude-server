@@ -21,6 +21,7 @@ const btnToggle    = $('btn-sidebar-toggle');
 const btnAttach    = $('btn-attach');
 const fileInput    = $('file-input');
 const modalOverlay = $('modal-overlay');
+const ctxMenu      = $('context-menu');
 
 // ── xterm.js ─────────────────────────────────────────────────────────────────
 function initTerminal() {
@@ -37,11 +38,8 @@ function initTerminal() {
   term.loadAddon(fitAddon);
   term.open(termContainer);
   fitAddon.fit();
-
   term.onData(data => sendWs({ type: 'input', data }));
-
   window.addEventListener('resize', doFit);
-  // Initial resize will happen on WS open
 }
 
 function doFit() {
@@ -55,12 +53,7 @@ function connect(agentId) {
   if (ws) { ws.onclose = null; ws.close(); }
   currentAgentId = agentId;
   ws = new WebSocket(`${WS_URL}?agentId=${agentId}`);
-
-  ws.addEventListener('open', () => {
-    setConn(true);
-    // Send actual viewport size to server → PTY resize
-    setTimeout(doFit, 100);
-  });
+  ws.addEventListener('open', () => { setConn(true); setTimeout(doFit, 100); });
   ws.addEventListener('close', () => {
     setConn(false);
     setTimeout(() => { if (currentAgentId === agentId) connect(agentId); }, 3000);
@@ -85,6 +78,10 @@ function handleMsg(msg) {
     case 'exit':
       term.writeln('\r\n\x1b[33m[进程已退出]\x1b[0m');
       break;
+    case 'status':
+      // Update waiting indicator for this agent in sidebar
+      loadAgents();
+      break;
   }
 }
 
@@ -103,10 +100,16 @@ function renderAgentList(agents) {
     const li = document.createElement('li');
     li.dataset.id = a.id;
     if (a.id === currentAgentId) li.classList.add('active');
+
+    const statusIcon = !a.alive ? '○' : a.waitingForInput ? '⏳' : '●';
+    const statusClass = !a.alive ? '' : a.waitingForInput ? 'waiting' : 'alive';
+    const statusText = !a.alive ? '停止' : a.waitingForInput ? '等待输入' : '运行中';
+
     li.innerHTML = `<div class="agent-name">${a.name}</div>
       <div class="agent-meta">${a.type === 'master' ? '<span class="master-tag">M</span> ' : ''}
-      <span class="${a.alive ? 'alive' : ''}">${a.alive ? '●' : '○'}</span></div>`;
+      <span class="${statusClass}" title="${statusText}">${statusIcon}</span></div>`;
     li.addEventListener('click', () => { switchAgent(a.id, a); closeSidebar(); });
+    li.addEventListener('contextmenu', (e) => { e.preventDefault(); showContextMenu(e, a); });
     agentList.appendChild(li);
   }
 }
@@ -121,15 +124,33 @@ function switchAgent(agentId, agentData) {
   connect(agentId);
 }
 
+// ── Right-click context menu ─────────────────────────────────────────────────
+let ctxAgentId = null;
+
+function showContextMenu(e, agent) {
+  ctxAgentId = agent.id;
+  ctxMenu.style.left = e.clientX + 'px';
+  ctxMenu.style.top = e.clientY + 'px';
+  ctxMenu.classList.remove('hidden');
+  $('ctx-agent-name').textContent = agent.name;
+}
+
+document.addEventListener('click', () => ctxMenu.classList.add('hidden'));
+
+$('ctx-delete').addEventListener('click', async () => {
+  if (!ctxAgentId) return;
+  if (!confirm(`确定删除 Agent "${$('ctx-agent-name').textContent}"？`)) return;
+  await fetch(`/api/agents/${ctxAgentId}`, { method: 'DELETE' });
+  ctxMenu.classList.add('hidden');
+  if (currentAgentId === ctxAgentId) { currentAgentId = null; term?.clear(); }
+  await loadAgents();
+});
+
 // ── Sidebar toggle (mobile) ──────────────────────────────────────────────────
 function closeSidebar() { sidebar.classList.remove('open'); }
 btnToggle.addEventListener('click', () => sidebar.classList.toggle('open'));
-document.addEventListener('click', (e) => {
-  if (sidebar.classList.contains('open') && !sidebar.contains(e.target) && e.target !== btnToggle)
-    closeSidebar();
-});
 
-// ── Input bar — send text to PTY ─────────────────────────────────────────────
+// ── Input bar ────────────────────────────────────────────────────────────────
 function sendInput() {
   const text = msgInput.value;
   if (!text) return;
@@ -138,21 +159,30 @@ function sendInput() {
   msgInput.style.height = 'auto';
   term.focus();
 }
-
 btnSend.addEventListener('click', sendInput);
 msgInput.addEventListener('keydown', e => {
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendInput(); }
 });
-// Auto-grow textarea
 msgInput.addEventListener('input', () => {
   msgInput.style.height = 'auto';
   msgInput.style.height = Math.min(msgInput.scrollHeight, 120) + 'px';
 });
 
-// ── New agent modal ───────────────────────────────────────────────────────────
-btnNew.addEventListener('click', () => { modalOverlay.classList.remove('hidden'); $('modal-name').focus(); });
+// ── New agent modal (click blank does NOT close) ─────────────────────────────
+btnNew.addEventListener('click', () => {
+  $('modal-name').value = '';
+  $('modal-cwd').value = '/home';
+  modalOverlay.classList.remove('hidden');
+  $('modal-name').focus();
+  loadBrowse('/home');
+});
+// Only close via cancel button or ESC — NOT by clicking overlay
 $('modal-cancel').addEventListener('click', () => modalOverlay.classList.add('hidden'));
-modalOverlay.addEventListener('click', e => { if (e.target === modalOverlay) modalOverlay.classList.add('hidden'); });
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && !modalOverlay.classList.contains('hidden'))
+    modalOverlay.classList.add('hidden');
+});
+
 $('modal-confirm').addEventListener('click', async () => {
   const name = $('modal-name').value.trim();
   if (!name) return;
@@ -166,6 +196,34 @@ $('modal-confirm').addEventListener('click', async () => {
   await loadAgents();
   switchAgent(agent.id, agent);
 });
+
+// ── Directory browser in modal ───────────────────────────────────────────────
+async function loadBrowse(path) {
+  const res = await fetch(`/api/browse?path=${encodeURIComponent(path)}`);
+  if (!res.ok) return;
+  const { entries } = await res.json();
+  const list = $('browse-list');
+  list.innerHTML = '';
+
+  // Parent directory entry
+  if (path !== '/') {
+    const parent = path.split('/').slice(0, -1).join('/') || '/';
+    const li = document.createElement('li');
+    li.textContent = '📁 ..';
+    li.addEventListener('click', () => { $('modal-cwd').value = parent; loadBrowse(parent); });
+    list.appendChild(li);
+  }
+
+  for (const e of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+    const li = document.createElement('li');
+    li.textContent = `📁 ${e.name}`;
+    const full = path === '/' ? `/${e.name}` : `${path}/${e.name}`;
+    li.addEventListener('click', () => { $('modal-cwd').value = full; loadBrowse(full); });
+    list.appendChild(li);
+  }
+}
+// Also refresh browse when user manually edits the path input
+$('modal-cwd').addEventListener('change', () => loadBrowse($('modal-cwd').value));
 
 // ── File attach ───────────────────────────────────────────────────────────────
 btnAttach.addEventListener('click', () => fileInput.click());
@@ -201,4 +259,4 @@ loadAgents().then(agents => {
   const first = agents.find(a => a.alive) ?? agents[0];
   if (first) switchAgent(first.id, first);
 });
-setInterval(loadAgents, 15000);
+setInterval(loadAgents, 10000);

@@ -3,7 +3,7 @@ import { createServer } from 'http';
 import { WebSocketServer } from 'ws';
 import { fileURLToPath } from 'url';
 import { join, dirname } from 'path';
-import { mkdirSync } from 'fs';
+import { mkdirSync, readdirSync, statSync } from 'fs';
 
 import agentsRouter from './api/agents.js';
 import filesRouter from './api/files.js';
@@ -29,6 +29,24 @@ app.use('/api/files', filesRouter);
 // Memory endpoint (flat, not under /api/agents to keep it simple)
 app.get('/api/memory', (_req, res) => {
   res.json(getAllMemory());
+});
+
+// Browse server directories (for the "new agent" modal directory picker)
+app.get('/api/browse', (req, res) => {
+  const targetPath = req.query.path || '/';
+  try {
+    const items = readdirSync(targetPath);
+    const entries = items.slice(0, 200).map(name => {
+      try {
+        const full = join(targetPath, name);
+        const st = statSync(full);
+        return { name, type: st.isDirectory() ? 'dir' : 'file' };
+      } catch { return { name, type: 'unknown' }; }
+    }).filter(e => e.type === 'dir'); // Only show directories for cwd selection
+    res.json({ path: targetPath, entries });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
 });
 
 // Health

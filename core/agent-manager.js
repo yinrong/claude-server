@@ -1,6 +1,6 @@
 import { EventEmitter } from 'events';
 import {
-  saveAgent, getAgent, getAllAgents, setAgentStatus, setAgentConfig,
+  saveAgent, getAgent, getAllAgents, setAgentStatus, setAgentConfig, deleteAgentFromDB,
   saveMessage, getMessages,
   getAllMemory, upsertMemoryItem, countMemoryUpdatedSince,
   appendOutput, getRecentOutput,
@@ -31,14 +31,33 @@ class AgentManager extends EventEmitter {
     const dbAgent = getAgent(id);
     if (!dbAgent) return null;
     const live = this._sessions.get(id);
-    return { ...dbAgent, alive: live?.adapter?.alive ?? false, subscribers: live?.subscribers?.size ?? 0 };
+    return {
+      ...dbAgent,
+      alive: live?.adapter?.alive ?? false,
+      subscribers: live?.subscribers?.size ?? 0,
+      waitingForInput: live?.waitingForInput ?? false,
+    };
   }
 
   listAgents() {
     return getAllAgents().map(a => {
       const live = this._sessions.get(a.id);
-      return { ...a, alive: live?.adapter?.alive ?? false, subscribers: live?.subscribers?.size ?? 0 };
+      return {
+        ...a,
+        alive: live?.adapter?.alive ?? false,
+        subscribers: live?.subscribers?.size ?? 0,
+        waitingForInput: live?.waitingForInput ?? false,
+      };
     });
+  }
+
+  deleteAgent(agentId) {
+    const session = this._sessions.get(agentId);
+    if (session) {
+      session.adapter.stop();
+      this._sessions.delete(agentId);
+    }
+    deleteAgentFromDB(agentId);
   }
 
   subscribe(agentId, ws) {
@@ -108,11 +127,26 @@ class AgentManager extends EventEmitter {
   // ── Internals ──────────────────────────────────────────────────────────────
 
   _wireAdapter(agentId, adapter) {
+    const session = this._sessions.get(agentId);
+    if (session) session.waitingForInput = false;
+    let idleTimer = null;
+
     adapter.on('data', (data) => {
       appendOutput(agentId, data);
       this._broadcast(agentId, { type: 'output', data });
+
+      // Detect idle/waiting state: if no output for 2 seconds after a prompt-like character
+      if (session) {
+        session.waitingForInput = false;
+        clearTimeout(idleTimer);
+        idleTimer = setTimeout(() => {
+          session.waitingForInput = true;
+          this._broadcast(agentId, { type: 'status', agentId, waitingForInput: true });
+        }, 2000);
+      }
     });
     adapter.on('exit', (code) => {
+      if (session) session.waitingForInput = false;
       setAgentStatus(agentId, 'stopped');
       this._broadcast(agentId, { type: 'exit', code });
     });

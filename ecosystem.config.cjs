@@ -1,15 +1,30 @@
 module.exports = {
-  apps: [{
-    name: 'claude-server',
-    script: 'server/index.js',
-    env: {
-      PORT: 4280,
-      FILES_DIR: '/tmp/claude-hub-files',
-      NODE_ENV: 'production',
+  apps: [
+    {
+      name: 'claude-server-prod',
+      script: 'server/index.js',
+      env: {
+        PORT: 4280,
+        DB_PATH: 'data/prod.db',
+        FILES_DIR: 'data/prod-files',
+        NODE_ENV: 'production',
+      },
+      restart_delay: 2000,
+      max_restarts: 20,
+      watch: false,
     },
-    restart_delay: 2000,
-    max_restarts: 20,
-    watch: false,
-    log_date_format: 'YYYY-MM-DD HH:mm:ss',
-  }],
+    {
+      name: 'claude-server-dev',
+      script: 'server/index.js',
+      env: {
+        PORT: 4281,
+        DB_PATH: 'data/dev.db',
+        FILES_DIR: 'data/dev-files',
+        NODE_ENV: 'development',
+      },
+      restart_delay: 1000,
+      max_restarts: 10,
+      watch: false,
+    },
+  ],
 };
