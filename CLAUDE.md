@@ -49,6 +49,46 @@ public/                         ← 纯静态前端（无构建步骤）
 | `master` | systemPrompt 动态注入所有记忆；观察所有 Worker 对话并异步提取用户偏好 |
 | `worker` | 独立 claude-code 实例，处理具体任务 |
 
+## 核心架构要求（用户原始需求）
+
+### 中间层架构（最重要的设计约束）
+
+服务端不是 Browser↔PTY 的简单管道。它是一个**中间层**，拦截所有 I/O，具备全局视角：
+
+```
+Browser ↔ WebSocket ↔ 中间层(Server) ↔ Adapter ↔ claude-code / 其他工具
+                           │
+                    ┌──────┼──────┐
+                    │      │      │
+              路由消息  提取记忆  状态监控
+```
+
+中间层的职责：
+1. **集中所有输入输出** — 一切对话都经过服务端，服务端有全局视角，可做统一控制
+2. **让 Master 感知 Hub 内所有 Agent** — Master 通过服务端 API 查看其他 Agent 的状态和最近输出（而非去找机器上的 tmux 进程）
+3. **让 Master 控制 Worker** — Master 可通过服务端向任意 Worker 注入消息
+4. **从对话中提取记忆** — 观察 Worker 输出，检测一轮对话完成，异步分析用户偏好
+5. **Worker 可替换** — 底层 Worker 可以是 claude-code、openai、gemini 或任何工具，替换不影响上层
+
+### Master 的角色
+
+"指定其中一个 claude-code 具备我的记忆，代替我控制其他 claude-code"：
+- Master 持有用户的偏好记忆（systemPrompt 动态注入）
+- Master 能查询所有 Worker 的工作目标和当前状态
+- Master 能代替用户向 Worker 下达指令和反馈
+- Master 能监督 Worker 不间断运行直到完成目标
+
+### 用户对功能的根本要求
+
+1. **完整 claude-code 功能** — 所有 slash commands（/resume, /compact, /clear）必须可用，不能用 --print 模式
+2. **服务端持续运行** — 不受客户端关闭影响
+3. **多端同时控制** — 手机和 PC 同时随意在某一端控制
+4. **图片/文件/文字** — 多模态支持
+5. **持续探索不停下** — Agent 自主工作，不停下询问用户（--dangerously-skip-permissions + 自主循环）
+6. **Worker 可替换** — 接口层抽象，未来适配其他工具
+
+---
+
 ## 关键设计决策
 
 ### 为什么用 PTY 交互模式而非 `--print`
