@@ -40,6 +40,8 @@ public/                         ← 纯静态前端（无构建步骤）
   └── style.css                 ← Catppuccin Mocha 主题
 ```
 
+查看所有 API 路由：`grep -rn "app\.\|router\." server/ | grep -E "\.(get|post|put|patch|delete)\("`
+
 ## Agent 类型
 
 | 类型 | 说明 |
@@ -49,18 +51,35 @@ public/                         ← 纯静态前端（无构建步骤）
 
 ## 关键设计决策
 
-### ClaudeCodeAdapter 的多轮对话方案
+### 为什么用 PTY 交互模式而非 `--print`
 
-**问题**：`claude --input-format stream-json` 对 stdin 里的每条 user 消息都会响应，直接传历史会导致 adapter 捕获到第一条历史消息的回答，后续轮次返回相同结果。
+**问题**：`--input-format stream-json` 和 `--output-format stream-json` 都 "only works with --print"。但 `--print` 模式下所有 slash commands（`/resume`、`/compact`、`/clear` 等）不可用，用户发送 `/resume` 会得到 "not available in this environment" 错误。
 
-**方案**：把对话历史编码为 `--append-system-prompt`（XML 格式），stdin 只传当前新消息，claude 只响应一次。
+**方案**：用 `node-pty` 启动完整交互模式的 claude 进程，保留全部功能。每个 Agent 是一个持久 PTY 会话，与客户端生命周期完全解耦。
 
 ```
-claude --print --output-format stream-json --verbose \
-       --dangerously-skip-permissions \
-       --append-system-prompt "<conversation_history>...</conversation_history>" \
-<<< "当前用户消息"
+pty.spawn('claude', ['--dangerously-skip-permissions'], { cwd, cols: 80, rows: 24 })
 ```
+
+claude 自己管理对话历史和 session 持久化，服务端只负责 PTY I/O 转发和输出缓存。
+
+### 多环境隔离 (dev/prod)
+
+**问题**：代码更新后重启 server 会中断正在运行的 Agent 进程。
+
+**方案**：prod 和 dev 用不同端口 + 不同 DB，PM2 分别管理。代码更新只重启 dev，**绝不能** `pm2 delete all` 或 `pm2 restart all`。
+
+| 环境 | 端口 | DB | PM2 名 |
+|------|------|-----|--------|
+| prod | 4280 | data/prod.db | claude-server-prod |
+| dev | 4281 | data/dev.db | claude-server-dev |
+| test | 37890 | data/test.db | (Playwright 自动启停) |
+
+更新代码后只执行：`pm2 restart claude-server-dev`
+
+### Agent waitingForInput 检测
+
+PTY 输出流中，如果 2 秒内无新数据，判定该 Agent "等待用户输入"（`waitingForInput: true`），通过 WebSocket status 事件广播给所有客户端，侧栏显示 ⏳ 图标。任何新输出立刻重置为 false。
 
 ### Master 记忆系统
 
@@ -72,13 +91,17 @@ Master 回复中若包含 `@dispatch <agentId>: <任务>` 模式，AgentManager 
 
 ## HTTP API
 
+查看所有路由：`grep -rn "app\.\|router\." server/ | grep -E "\.(get|post|put|patch|delete)\("`
+
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | GET | `/api/agents` | 列出所有 Agent |
 | POST | `/api/agents` | 创建 Agent `{name, type, adapterType, config}` |
 | GET | `/api/agents/:id` | 获取单个 Agent 状态 |
+| DELETE | `/api/agents/:id` | 删除 Agent（kill PTY + 从 DB 移除）|
 | POST | `/api/files` | 上传文件 `{data: dataURL, name}` → `{fileId, url, path}` |
 | GET | `/api/memory` | 获取所有用户偏好记忆 |
+| GET | `/api/browse?path=` | 浏览服务器目录（仅返回子目录） |
 | GET | `/files/:filename` | 访问已上传文件 |
 
 ## WebSocket 协议 `/ws?agentId=`
@@ -86,20 +109,19 @@ Master 回复中若包含 `@dispatch <agentId>: <任务>` 模式，AgentManager 
 **Client → Server**
 
 ```jsonc
-{ "type": "msg", "agentId": "...", "content": [{"type":"text","text":"..."}] }
-{ "type": "dispatch", "toAgentId": "...", "fromAgentId": "...", "content": [...] }
+{ "type": "input", "data": "用户键盘输入\r" }   // 直接写入 PTY stdin
+{ "type": "resize", "cols": 120, "rows": 40 }    // 终端窗口尺寸变化
+{ "type": "msg", "agentId": "...", "content": [{"type":"text","text":"..."}] }  // 结构化消息（含文件引用）
 { "type": "sub", "agentId": "..." }   // 订阅额外的 agent
 ```
 
 **Server → Client**
 
 ```jsonc
-{ "type": "history", "messages": [...] }   // 连接时回放历史
-{ "type": "msg", "message": {...} }         // 用户消息确认（user/dispatch role）
-{ "type": "chunk", "agentId": "...", "text": "..." }  // 流式文字块
-{ "type": "done", "agentId": "...", "msgId": "..." }  // 本轮完成
-{ "type": "status", "agentId": "...", "status": "running|idle|error" }
-{ "type": "error", "agentId": "...", "error": "..." }
+{ "type": "history", "chunks": ["..."] }           // 连接时回放 PTY 输出缓存
+{ "type": "output", "data": "..." }                // PTY 实时输出（含 ANSI）
+{ "type": "status", "agentId": "...", "waitingForInput": true }  // Agent 等待输入
+{ "type": "exit", "code": 0 }                      // PTY 进程退出
 ```
 
 ## 数据库 Schema
@@ -110,6 +132,7 @@ messages (id, agent_id, role, content JSON, from_agent_id, ts)
 files    (id, name, path, url, mime_type, created_at)
 memory   (id, category, key, value, confidence, source_agent_id, created_at, updated_at)
          UNIQUE(category, key)
+output_buffer (id AUTO, agent_id, data TEXT, ts)  -- PTY 原始输出缓存，保留最近 5000 条/agent
 ```
 
 数据库路径：`data/claude-server.db`（可通过 `DB_PATH` 环境变量覆盖，测试时用 `data/test.db`）。
@@ -117,7 +140,7 @@ memory   (id, category, key, value, confidence, source_agent_id, created_at, upd
 ## 测试
 
 ```bash
-# 单元/集成 E2E（10 个测试，用 mock adapter，不调用真实 claude）
+# 单元/集成 E2E（14 个测试，用 mock adapter，不调用真实 claude）
 PORT=37890 npx playwright test
 
 # UI 浏览器交互测试（2 个测试，调用真实 claude，需要 PM2 在 4280 运行）
@@ -126,7 +149,7 @@ xvfb-run --auto-servernum npx playwright test --config=playwright.smoke.config.j
 
 | 测试文件 | 内容 |
 |----------|------|
-| `tests/e2e.test.js` | T1-T10：健康检查、Agent CRUD、WS 历史、流式响应、多端广播、持久性、文件上传、文件消息、记忆 API、Master systemPrompt |
+| `tests/e2e.test.js` | T1-T14：健康检查、Agent CRUD、WS 历史、流式响应、多端广播、持久性、文件上传、文件消息、记忆 API、Master systemPrompt、**删除 Agent、目录浏览、waitingForInput 状态、多环境隔离** |
 | `tests/ui-smoke.test.js` | 完整用户流程（真实 chrome）；**回归：多轮对话答案随问题变化**（防止历史传递 bug 复现） |
 
 ## 环境变量
