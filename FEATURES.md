@@ -56,8 +56,8 @@
 | # | 功能 | 说明 | 状态 | 测试 |
 |---|------|------|------|------|
 | U4 | 底部输入栏 | 独立 textarea，Enter 发送 | ⚠️ | — |
-| U5 | 手机键盘输入 | 手机端键盘能正常输入文字 | ❌ 失效 | — |
-| U6 | UI 与网络解耦 | 输入/切换等 UI 操作不因网络卡顿而卡死 | 🔲 | — |
+| U5 | 手机键盘输入 | 手机端通过底部 textarea 输入，xterm 禁用 stdin | ✅ | mobile:keyboard |
+| U6 | UI 与网络解耦 | 消息队列缓冲，WS 断开不丢输入，重连自动 flush | ✅ | mobile:queue |
 
 ### 2.3 侧栏与导航
 
@@ -122,7 +122,7 @@
 | # | 要求 | 说明 | 状态 |
 |---|------|------|------|
 | T-R1 | 每个功能有 E2E 回归测试 | 包括已修复的 bug 也要有回归测试 | 部分 |
-| T-R2 | 手机 UI 模拟交互测试 | Playwright mobile viewport 模拟触摸/键盘 | 🔲 |
+| T-R2 | 手机 UI 模拟交互测试 | Playwright Pixel 5 viewport, 5 tests | ✅ |
 | T-R3 | 桌面 UI 模拟交互测试 | Playwright desktop viewport 完整流程 | ✅ |
 | T-R4 | 每个 Bug 修复后加回归测试 | 防止复现 | 部分 |
 
@@ -164,6 +164,6 @@
 
 | # | 问题 | 原因 | 优先级 | 回归测试 |
 |---|------|------|--------|---------|
-| BUG1 | 手机键盘输入失效 (U5) | UI 重构后 xterm + textarea focus/事件冲突 | 高 | 🔲 待加 |
+| ~~BUG1~~ | ~~手机键盘输入失效 (U5)~~ | ~~已修复: disableStdin on mobile~~ | — | ✅ mobile:keyboard |
 | BUG2 | Master 无法感知 Hub 内 Agent (C1-C3) | PTY 纯管道，服务端不拦截语义 | 高 | 🔲 待加 |
-| BUG3 | 网络卡顿时 UI 操作卡死 (U6) | UI 操作与 WS 发送同步耦合 | 高 | 🔲 待加 |
+| ~~BUG3~~ | ~~网络卡顿时 UI 操作卡死 (U6)~~ | ~~已修复: sendQueue + flush~~ | — | ✅ mobile:queue |
