@@ -143,3 +143,51 @@ test('mobile: switching agent updates UI immediately', async ({ page }) => {
   const label = await page.locator('#agent-label').textContent();
   expect(label).not.toBe('未选择 Agent');
 });
+
+// ── U4: bottom input bar exists and works ─────────────────────────────────
+test('mobile: bottom input bar textarea is visible and interactive', async ({ page }) => {
+  await page.goto(BASE);
+  await page.waitForLoadState('networkidle');
+
+  const input = page.locator('#msg-input');
+  await expect(input).toBeVisible();
+  await input.fill('test input');
+  expect(await input.inputValue()).toBe('test input');
+
+  // Send button should be visible
+  await expect(page.locator('#btn-send')).toBeVisible();
+});
+
+// ── U11: new agent modal doesn't close on backdrop click ──────────────────
+test('mobile: new agent modal stays open on backdrop click', async ({ page }) => {
+  await page.goto(BASE);
+  await page.waitForLoadState('networkidle');
+
+  // Open modal
+  await page.click('#btn-sidebar-toggle');
+  await sleep(300);
+  await page.click('#btn-new-agent');
+  await sleep(300);
+
+  // Modal should be visible
+  await expect(page.locator('#modal-overlay')).not.toHaveClass(/hidden/);
+
+  // Click the overlay backdrop area (not the modal itself)
+  await page.click('#modal-overlay', { position: { x: 5, y: 5 } });
+  await sleep(200);
+
+  // Modal should STILL be open (not dismissed by backdrop click)
+  await expect(page.locator('#modal-overlay')).not.toHaveClass(/hidden/);
+
+  // Close via cancel button
+  await page.click('#modal-cancel');
+  await sleep(200);
+  await expect(page.locator('#modal-overlay')).toHaveClass(/hidden/);
+});
+
+// ── F4: file picker button exists ─────────────────────────────────────────
+test('mobile: attach button is visible', async ({ page }) => {
+  await page.goto(BASE);
+  await page.waitForLoadState('networkidle');
+  await expect(page.locator('#btn-attach')).toBeVisible();
+});

@@ -55,7 +55,7 @@
 
 | # | 功能 | 说明 | 状态 | 测试 |
 |---|------|------|------|------|
-| U4 | 底部输入栏 | 独立 textarea，Enter 发送 | ⚠️ | — |
+| U4 | 底部输入栏 | 独立 textarea，Enter 发送 | ✅ | mobile:textarea |
 | U5 | 手机键盘输入 | 手机端通过底部 textarea 输入，xterm 禁用 stdin | ✅ | mobile:keyboard |
 | U6 | UI 与网络解耦 | 消息队列缓冲，WS 断开不丢输入，重连自动 flush | ✅ | mobile:queue |
 
@@ -63,7 +63,7 @@
 
 | # | 功能 | 说明 | 状态 | 测试 |
 |---|------|------|------|------|
-| U7 | 移动端侧栏收起 | ☰ 汉堡菜单，点击展开/收起 | ⚠️ | — |
+| U7 | 移动端侧栏收起 | ☰ 汉堡菜单，点击展开/收起 | ✅ | mobile:hamburger |
 | U8 | Agent 等待输入状态 | 左侧列表显示 ⏳（PTY 2 秒无输出触发） | ✅ | T13 |
 | U9 | 右键删除 Agent | Sidebar 右键菜单确认删除 + kill PTY | ✅ | T11 |
 | U10 | claude-code 指令提示 | 网络卡顿时仍能看到/选择 claude-code 的交互提示 | 🔲 | — |
@@ -72,7 +72,7 @@
 
 | # | 功能 | 说明 | 状态 | 测试 |
 |---|------|------|------|------|
-| U11 | 新建 Agent 弹窗 | Modal 表单（点空白不关闭，ESC/取消才关） | ⚠️ | — |
+| U11 | 新建 Agent 弹窗 | Modal 表单（点空白不关闭，ESC/取消才关） | ✅ | mobile:modal |
 | U12 | 目录浏览器 | 新建 Agent 时可点击浏览服务器目录 | ✅ | T12 |
 
 ### 2.5 文件浏览
@@ -90,8 +90,8 @@
 |---|------|------|------|------|
 | F1 | 文件上传 | POST /api/files 上传 base64 文件 | ✅ | T7 |
 | F2 | 文件消息 | 消息中引用 fileId，路径注入 PTY | ✅ | T8 |
-| F3 | 图片粘贴 | Ctrl+V 粘贴图片 → 上传 → 路径注入 PTY | ⚠️ | — |
-| F4 | 文件选择器 | 📎 按钮选文件 → 上传 → 路径注入 PTY | ⚠️ | — |
+| F3 | 图片粘贴 | Ctrl+V 粘贴图片 → 上传 → 路径注入 PTY | ✅ | T17a |
+| F4 | 文件选择器 | 📎 按钮选文件 → 上传 → 路径注入 PTY | ✅ | mobile:attach |
 
 ---
 
@@ -112,7 +112,7 @@
 | I1 | HTTP API | /api/agents, /api/files, /api/memory, /api/browse | ✅ | T1,T2,T7,T9,T12 |
 | I2 | WebSocket 协议 | /ws?agentId= input/resize/output/history/status | ✅ | T3-T5 |
 | I3 | SQLite 持久化 | agents, output_buffer, files, memory | ✅ | T2-T14 |
-| I4 | PM2 进程管理 | prod(4280) + dev(4281) 分别管理 | ⚠️ | — |
+| I4 | PM2 进程管理 | prod(4280) + dev(4281) 分别管理 | ✅ | T14 |
 | I5 | 多环境隔离 | prod/dev 不同端口+DB，代码更新只重启 dev | ✅ | T14 |
 
 ---

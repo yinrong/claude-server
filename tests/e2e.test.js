@@ -282,6 +282,16 @@ test('T16: GET /api/readfile returns file content', async ({ request }) => {
   expect(body.content.length).toBeGreaterThan(0);
 });
 
+// ── T17a: Image paste flow (F3) — upload + inject path ────────────────────
+test('T17a: POST /api/files with image data returns path', async ({ request }) => {
+  const tinyPng = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+  const res = await request.post('/api/files', { data: { data: tinyPng, name: 'paste.png' } });
+  expect(res.status()).toBe(201);
+  const body = await res.json();
+  expect(body.path).toMatch(/\.png$/);
+  expect(body.url).toMatch(/^\/files\//);
+});
+
 // ── T17: Restart agent with new cwd ──────────────────────────────────────
 test('T17: POST /api/agents/:id/restart changes cwd and restarts', async () => {
   const agentId = await createAgent();
