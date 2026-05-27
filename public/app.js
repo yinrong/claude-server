@@ -3,6 +3,8 @@ let ws = null;
 let currentAgentId = null;
 let term = null;
 let fitAddon = null;
+const isMobile = () => window.innerWidth < 769;
+const sendQueue = []; // Messages queued when WS is disconnected
 
 const WS_URL = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`;
 
@@ -26,26 +28,50 @@ const ctxMenu      = $('context-menu');
 // ── xterm.js ─────────────────────────────────────────────────────────────────
 function initTerminal() {
   if (term) term.dispose();
-  const isMobile = window.innerWidth < 769;
+  const mobile = isMobile();
   term = new Terminal({
     theme: { background: '#1e1e2e', foreground: '#cdd6f4', cursor: '#f5e0dc', selectionBackground: '#45475a' },
-    fontSize: isMobile ? 12 : 14,
+    fontSize: mobile ? 12 : 14,
     fontFamily: '"JetBrains Mono", "Fira Code", "Cascadia Code", "Menlo", monospace',
     scrollback: 50000,
     cursorBlink: true,
+    // Mobile: disable xterm's built-in keyboard capture — input goes through bottom textarea only
+    disableStdin: mobile,
   });
   fitAddon = new FitAddon.FitAddon();
   term.loadAddon(fitAddon);
   term.open(termContainer);
   fitAddon.fit();
-  term.onData(data => sendWs({ type: 'input', data }));
+
+  // Desktop: forward xterm keyboard input to PTY
+  if (!mobile) {
+    term.onData(data => queueSend({ type: 'input', data }));
+  }
+
   window.addEventListener('resize', doFit);
 }
 
 function doFit() {
   if (!fitAddon || !term) return;
   fitAddon.fit();
-  sendWs({ type: 'resize', cols: term.cols, rows: term.rows });
+  queueSend({ type: 'resize', cols: term.cols, rows: term.rows });
+}
+
+// ── Message queue (network decoupling) ───────────────────────────────────────
+// UI operations never block. Messages queue when WS is down, flush on reconnect.
+function queueSend(msg) {
+  if (ws?.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify(msg));
+  } else {
+    // Queue non-resize messages (resize can be stale)
+    if (msg.type !== 'resize') sendQueue.push(msg);
+  }
+}
+
+function flushQueue() {
+  while (sendQueue.length > 0 && ws?.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify(sendQueue.shift()));
+  }
 }
 
 // ── WebSocket ────────────────────────────────────────────────────────────────
@@ -53,7 +79,11 @@ function connect(agentId) {
   if (ws) { ws.onclose = null; ws.close(); }
   currentAgentId = agentId;
   ws = new WebSocket(`${WS_URL}?agentId=${agentId}`);
-  ws.addEventListener('open', () => { setConn(true); setTimeout(doFit, 100); });
+  ws.addEventListener('open', () => {
+    setConn(true);
+    flushQueue();
+    setTimeout(doFit, 100);
+  });
   ws.addEventListener('close', () => {
     setConn(false);
     setTimeout(() => { if (currentAgentId === agentId) connect(agentId); }, 3000);
@@ -64,7 +94,6 @@ function connect(agentId) {
   });
 }
 
-function sendWs(msg) { if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg)); }
 function setConn(ok) { connDot.className = `status-dot ${ok ? 'connected' : 'disconnected'}`; }
 
 function handleMsg(msg) {
@@ -79,7 +108,6 @@ function handleMsg(msg) {
       term.writeln('\r\n\x1b[33m[进程已退出]\x1b[0m');
       break;
     case 'status':
-      // Update waiting indicator for this agent in sidebar
       loadAgents();
       break;
   }
@@ -89,7 +117,7 @@ function handleMsg(msg) {
 let allAgents = [];
 
 async function loadAgents() {
-  allAgents = await (await fetch('/api/agents')).json();
+  try { allAgents = await (await fetch('/api/agents')).json(); } catch { return; }
   renderAgentList(allAgents);
   return allAgents;
 }
@@ -115,6 +143,7 @@ function renderAgentList(agents) {
 }
 
 function switchAgent(agentId, agentData) {
+  // Immediate UI update (no network dependency)
   for (const li of agentList.querySelectorAll('li'))
     li.classList.toggle('active', li.dataset.id === agentId);
   agentLabel.textContent = agentData?.name ?? agentId.slice(0, 8);
@@ -154,10 +183,12 @@ btnToggle.addEventListener('click', () => sidebar.classList.toggle('open'));
 function sendInput() {
   const text = msgInput.value;
   if (!text) return;
-  sendWs({ type: 'input', data: text + '\n' });
+  queueSend({ type: 'input', data: text + '\n' });
   msgInput.value = '';
   msgInput.style.height = 'auto';
-  term.focus();
+  // Mobile: keep focus on the input bar (don't steal to xterm)
+  // Desktop: optionally refocus terminal
+  if (!isMobile()) term.focus();
 }
 btnSend.addEventListener('click', sendInput);
 msgInput.addEventListener('keydown', e => {
@@ -176,7 +207,6 @@ btnNew.addEventListener('click', () => {
   $('modal-name').focus();
   loadBrowse('/home');
 });
-// Only close via cancel button or ESC — NOT by clicking overlay
 $('modal-cancel').addEventListener('click', () => modalOverlay.classList.add('hidden'));
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape' && !modalOverlay.classList.contains('hidden'))
@@ -199,30 +229,30 @@ $('modal-confirm').addEventListener('click', async () => {
 
 // ── Directory browser in modal ───────────────────────────────────────────────
 async function loadBrowse(path) {
-  const res = await fetch(`/api/browse?path=${encodeURIComponent(path)}`);
-  if (!res.ok) return;
-  const { entries } = await res.json();
-  const list = $('browse-list');
-  list.innerHTML = '';
+  try {
+    const res = await fetch(`/api/browse?path=${encodeURIComponent(path)}`);
+    if (!res.ok) return;
+    const { entries } = await res.json();
+    const list = $('browse-list');
+    list.innerHTML = '';
 
-  // Parent directory entry
-  if (path !== '/') {
-    const parent = path.split('/').slice(0, -1).join('/') || '/';
-    const li = document.createElement('li');
-    li.textContent = '📁 ..';
-    li.addEventListener('click', () => { $('modal-cwd').value = parent; loadBrowse(parent); });
-    list.appendChild(li);
-  }
+    if (path !== '/') {
+      const parent = path.split('/').slice(0, -1).join('/') || '/';
+      const li = document.createElement('li');
+      li.textContent = '📁 ..';
+      li.addEventListener('click', () => { $('modal-cwd').value = parent; loadBrowse(parent); });
+      list.appendChild(li);
+    }
 
-  for (const e of entries.sort((a, b) => a.name.localeCompare(b.name))) {
-    const li = document.createElement('li');
-    li.textContent = `📁 ${e.name}`;
-    const full = path === '/' ? `/${e.name}` : `${path}/${e.name}`;
-    li.addEventListener('click', () => { $('modal-cwd').value = full; loadBrowse(full); });
-    list.appendChild(li);
-  }
+    for (const e of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+      const li = document.createElement('li');
+      li.textContent = `📁 ${e.name}`;
+      const full = path === '/' ? `/${e.name}` : `${path}/${e.name}`;
+      li.addEventListener('click', () => { $('modal-cwd').value = full; loadBrowse(full); });
+      list.appendChild(li);
+    }
+  } catch { /* network error — non-blocking */ }
 }
-// Also refresh browse when user manually edits the path input
 $('modal-cwd').addEventListener('change', () => loadBrowse($('modal-cwd').value));
 
 // ── File attach ───────────────────────────────────────────────────────────────
@@ -230,10 +260,12 @@ btnAttach.addEventListener('click', () => fileInput.click());
 fileInput.addEventListener('change', async () => {
   for (const file of fileInput.files) {
     const dataUrl = await new Promise(r => { const fr = new FileReader(); fr.onload = e => r(e.target.result); fr.readAsDataURL(file); });
-    const res = await fetch('/api/files', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ data: dataUrl, name: file.name }) });
-    const { path } = await res.json();
-    sendWs({ type: 'input', data: path + '\n' });
+    try {
+      const res = await fetch('/api/files', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ data: dataUrl, name: file.name }) });
+      const { path } = await res.json();
+      queueSend({ type: 'input', data: path + '\n' });
+    } catch { /* queue for retry if needed */ }
   }
   fileInput.value = '';
 });
@@ -245,10 +277,12 @@ document.addEventListener('paste', async (e) => {
     if (!item.type.startsWith('image/')) continue;
     const file = item.getAsFile();
     const dataUrl = await new Promise(r => { const fr = new FileReader(); fr.onload = ev => r(ev.target.result); fr.readAsDataURL(file); });
-    const res = await fetch('/api/files', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ data: dataUrl, name: 'paste.png' }) });
-    const { path } = await res.json();
-    sendWs({ type: 'input', data: path + '\n' });
+    try {
+      const res = await fetch('/api/files', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ data: dataUrl, name: 'paste.png' }) });
+      const { path } = await res.json();
+      queueSend({ type: 'input', data: path + '\n' });
+    } catch { /* non-blocking */ }
     e.preventDefault();
   }
 });
@@ -256,6 +290,7 @@ document.addEventListener('paste', async (e) => {
 // ── Init ──────────────────────────────────────────────────────────────────────
 initTerminal();
 loadAgents().then(agents => {
+  if (!agents) return;
   const first = agents.find(a => a.alive) ?? agents[0];
   if (first) switchAgent(first.id, first);
 });
