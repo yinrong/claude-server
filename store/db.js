@@ -45,6 +45,13 @@ db.exec(`
     created_at INTEGER NOT NULL
   );
 
+  CREATE TABLE IF NOT EXISTS recent_commands (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    cwd TEXT NOT NULL,
+    adapter_type TEXT NOT NULL DEFAULT 'claude-code',
+    ts INTEGER NOT NULL
+  );
+
   CREATE TABLE IF NOT EXISTS output_buffer (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     agent_id TEXT NOT NULL,
@@ -211,4 +218,21 @@ export function getRecentOutput(agentId, n = 200, offset = 0) {
 
 export function countOutput(agentId) {
   return countOutputStmt.get(agentId).n;
+}
+
+// ── Recent Commands ──────────────────────────────────────────────────────
+
+const insertCommand = db.prepare(
+  'INSERT INTO recent_commands (cwd, adapter_type, ts) VALUES (?, ?, ?)'
+);
+const selectRecentCommands = db.prepare(
+  'SELECT DISTINCT cwd, adapter_type, MAX(ts) as ts FROM recent_commands GROUP BY cwd ORDER BY ts DESC LIMIT 20'
+);
+
+export function recordCommand(cwd, adapterType = 'claude-code') {
+  insertCommand.run(cwd, adapterType, Date.now());
+}
+
+export function getRecentCommands() {
+  return selectRecentCommands.all();
 }

@@ -313,3 +313,25 @@ test('T17: POST /api/agents/:id/restart changes cwd and restarts', async () => {
   expect(info.alive).toBe(true);
   expect(info.config.cwd).toBe('/tmp');
 });
+
+// ── T18: Recent commands (C11) ────────────────────────────────────────────
+test('T18: GET /api/recent-commands returns history of cwd/commands', async () => {
+  // Create agent with specific cwd
+  await fetch(`${BASE}/api/agents`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: 'CmdTest', type: 'worker', adapterType: 'mock', config: { cwd: '/home' } }),
+  });
+  await fetch(`${BASE}/api/agents`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: 'CmdTest2', type: 'worker', adapterType: 'mock', config: { cwd: '/var' } }),
+  });
+
+  const res = await fetch(`${BASE}/api/recent-commands`);
+  expect(res.status).toBe(200);
+  const body = await res.json();
+  expect(Array.isArray(body)).toBe(true);
+  // Should contain the cwds we just used
+  const cwds = body.map(c => c.cwd);
+  expect(cwds).toContain('/home');
+  expect(cwds).toContain('/var');
+});

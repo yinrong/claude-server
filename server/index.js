@@ -9,7 +9,7 @@ import agentsRouter from './api/agents.js';
 import filesRouter from './api/files.js';
 import { handleWS } from './ws.js';
 import { agentManager } from '../core/agent-manager.js';
-import { getAllMemory } from '../store/db.js';
+import { getAllMemory, getRecentCommands } from '../store/db.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const FILES_DIR = process.env.FILES_DIR ?? join(process.cwd(), 'data', 'files');
@@ -26,10 +26,11 @@ app.use('/files', express.static(FILES_DIR));
 app.use('/api/agents', agentsRouter);
 app.use('/api/files', filesRouter);
 
-// Memory endpoint (flat, not under /api/agents to keep it simple)
-app.get('/api/memory', (_req, res) => {
-  res.json(getAllMemory());
-});
+// Memory endpoint
+app.get('/api/memory', (_req, res) => { res.json(getAllMemory()); });
+
+// Recent commands (cwd history for quick-select)
+app.get('/api/recent-commands', (_req, res) => { res.json(getRecentCommands()); });
 
 // Browse server directories (for the "new agent" modal directory picker)
 app.get('/api/browse', (req, res) => {

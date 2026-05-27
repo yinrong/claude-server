@@ -4,6 +4,7 @@ import {
   saveMessage, getMessages,
   getAllMemory, upsertMemoryItem, countMemoryUpdatedSince,
   appendOutput, getRecentOutput,
+  recordCommand,
 } from '../store/db.js';
 import { MockAdapter } from './adapter/mock.js';
 import { ClaudeCodeAdapter } from './adapter/claude-code.js';
@@ -24,6 +25,7 @@ class AgentManager extends EventEmitter {
     const session = { config: getAgent(id), adapter, subscribers: new Set() };
     this._sessions.set(id, session);
     this._wireAdapter(id, adapter);
+    recordCommand(finalConfig.cwd, adapterType);
     return id;
   }
 
@@ -57,9 +59,9 @@ class AgentManager extends EventEmitter {
     session.adapter.restart(newConfig);
     setAgentConfig(agentId, newConfig);
     session.config.config = newConfig;
-    // Re-wire the adapter events (old listeners are on the dead PTY)
     this._wireAdapter(agentId, session.adapter);
     this._broadcast(agentId, { type: 'status', agentId, restarted: true, cwd: newConfig.cwd });
+    recordCommand(newConfig.cwd, session.config.adapter_type ?? 'claude-code');
   }
 
   deleteAgent(agentId) {
