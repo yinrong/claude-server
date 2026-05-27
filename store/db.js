@@ -194,7 +194,10 @@ const pruneOutput = db.prepare(`
   )
 `);
 const selectRecentOutput = db.prepare(
-  'SELECT data FROM output_buffer WHERE agent_id = ? ORDER BY id DESC LIMIT ?'
+  'SELECT data FROM output_buffer WHERE agent_id = ? ORDER BY id DESC LIMIT ? OFFSET ?'
+);
+const countOutputStmt = db.prepare(
+  'SELECT COUNT(*) as n FROM output_buffer WHERE agent_id = ?'
 );
 
 export function appendOutput(agentId, data) {
@@ -202,6 +205,10 @@ export function appendOutput(agentId, data) {
   pruneOutput.run(agentId, agentId);
 }
 
-export function getRecentOutput(agentId, n = 200) {
-  return selectRecentOutput.all(agentId, n).reverse().map(r => r.data);
+export function getRecentOutput(agentId, n = 200, offset = 0) {
+  return selectRecentOutput.all(agentId, n, offset).reverse().map(r => r.data);
+}
+
+export function countOutput(agentId) {
+  return countOutputStmt.get(agentId).n;
 }

@@ -3,7 +3,7 @@ import { createServer } from 'http';
 import { WebSocketServer } from 'ws';
 import { fileURLToPath } from 'url';
 import { join, dirname } from 'path';
-import { mkdirSync, readdirSync, statSync } from 'fs';
+import { mkdirSync, readdirSync, statSync, readFileSync } from 'fs';
 
 import agentsRouter from './api/agents.js';
 import filesRouter from './api/files.js';
@@ -46,6 +46,20 @@ app.get('/api/browse', (req, res) => {
     res.json({ path: targetPath, entries });
   } catch (err) {
     res.status(400).json({ error: err.message });
+  }
+});
+
+// Read file content (for file browser UI)
+app.get('/api/readfile', (req, res) => {
+  const filePath = req.query.path;
+  if (!filePath) return res.status(400).json({ error: 'path required' });
+  try {
+    const st = statSync(filePath);
+    if (st.size > 1024 * 1024) return res.status(413).json({ error: 'file too large (>1MB)' });
+    const content = readFileSync(filePath, 'utf-8');
+    res.json({ path: filePath, content, size: st.size });
+  } catch (err) {
+    res.status(404).json({ error: err.message });
   }
 });
 

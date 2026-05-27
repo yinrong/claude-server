@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { agentManager } from '../../core/agent-manager.js';
-import { getAllMemory } from '../../store/db.js';
+import { getAllMemory, getRecentOutput, countOutput } from '../../store/db.js';
 
 const router = Router();
 
@@ -33,6 +33,16 @@ router.get('/:id', (req, res) => {
 router.delete('/:id', (req, res) => {
   agentManager.deleteAgent(req.params.id);
   res.json({ ok: true });
+});
+
+// GET /api/agents/:id/history — paginated output buffer
+router.get('/:id/history', (req, res) => {
+  const { id } = req.params;
+  const limit = Math.min(parseInt(req.query.limit) || 500, 5000);
+  const offset = parseInt(req.query.offset) || 0;
+  const chunks = getRecentOutput(id, limit, offset);
+  const total = countOutput(id);
+  res.json({ chunks, total, limit, offset });
 });
 
 // GET /api/memory

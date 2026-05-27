@@ -245,3 +245,39 @@ test('T14: server uses DB_PATH env for isolation', async () => {
   const dbPath = `${process.cwd()}/data/test.db`;
   expect(fs.existsSync(dbPath)).toBe(true);
 });
+
+// ── T15: Worker history API with pagination ───────────────────────────────
+test('T15: GET /api/agents/:id/history returns paginated output', async () => {
+  const agentId = await createAgent();
+  const ws = await wsConnect(agentId);
+  await nextMsg(ws, 5000);
+
+  // Send a few messages to generate history
+  ws.send(JSON.stringify({ type: 'input', data: 'AAA\n' }));
+  await sleep(200);
+  ws.send(JSON.stringify({ type: 'input', data: 'BBB\n' }));
+  await sleep(200);
+  ws.close();
+
+  // Fetch history via API
+  const res = await fetch(`${BASE}/api/agents/${agentId}/history`);
+  expect(res.status).toBe(200);
+  const body = await res.json();
+  expect(Array.isArray(body.chunks)).toBe(true);
+  expect(body.chunks.length).toBeGreaterThan(0);
+  expect(body).toHaveProperty('total');
+
+  // Fetch with limit
+  const res2 = await fetch(`${BASE}/api/agents/${agentId}/history?limit=1`);
+  const body2 = await res2.json();
+  expect(body2.chunks.length).toBe(1);
+});
+
+// ── T16: Read file content API ────────────────────────────────────────────
+test('T16: GET /api/readfile returns file content', async ({ request }) => {
+  const res = await request.get('/api/readfile?path=/etc/hostname');
+  expect(res.status()).toBe(200);
+  const body = await res.json();
+  expect(body).toHaveProperty('content');
+  expect(body.content.length).toBeGreaterThan(0);
+});
