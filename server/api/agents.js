@@ -76,6 +76,18 @@ router.post('/:id/restart', (req, res) => {
   res.json({ ok: true, cwd: newConfig.cwd });
 });
 
+// POST /api/agents/:id/analyze — trigger memory extraction from recent output
+router.post('/:id/analyze', async (req, res) => {
+  const agent = agentManager.getAgent(req.params.id);
+  if (!agent) return res.status(404).json({ error: 'not found' });
+  const chunks = getRecentOutput(req.params.id, 50);
+  const text = chunks.join('').replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '');
+  // In production, this would call claude --print to analyze.
+  // For now, acknowledge the request (async analysis runs in background)
+  agentManager.triggerAnalysis(req.params.id, text);
+  res.json({ ok: true, textLength: text.length });
+});
+
 // POST /api/agents/:id/inject — Master injects text into Worker's PTY
 router.post('/:id/inject', (req, res) => {
   const { text } = req.body ?? {};

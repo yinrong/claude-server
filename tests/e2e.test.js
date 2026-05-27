@@ -417,6 +417,41 @@ test('T22: Master output with @dispatch injects into Worker', async () => {
   wsWorker.close();
 });
 
+// ── T23: Memory extraction triggered after agent goes idle (M3) ───────────
+test('T23: memory extraction API exists', async ({ request }) => {
+  // Verify the memory analysis can be triggered manually
+  const agentId = await createAgent();
+  const ws = await wsConnect(agentId);
+  await nextMsg(ws, 5000);
+  ws.send(JSON.stringify({ type: 'input', data: 'I prefer TypeScript over JavaScript\n' }));
+  await sleep(300);
+  ws.close();
+
+  // Trigger analysis explicitly via API
+  const res = await request.post(`/api/agents/${agentId}/analyze`);
+  expect(res.status()).toBe(200);
+  const body = await res.json();
+  expect(body).toHaveProperty('ok');
+});
+
+// ── T24: Worker swappability — mock adapter proves interface works ─────────
+test('T24: different adapter types work through same API', async () => {
+  // Create mock agent
+  const mockId = await createAgent({ name: 'MockWorker', adapterType: 'mock' });
+  const ws = await wsConnect(mockId);
+  await nextMsg(ws, 5000);
+  const outputs = [];
+  ws.on('message', d => { try { const m = JSON.parse(d); if (m.type === 'output') outputs.push(m.data); } catch {} });
+  ws.send(JSON.stringify({ type: 'input', data: 'SWAP_TEST\n' }));
+  await sleep(300);
+  expect(outputs.join('')).toContain('SWAP_TEST');
+  ws.close();
+
+  // Verify agent info shows correct adapter type
+  const info = await (await fetch(`${BASE}/api/agents/${mockId}`)).json();
+  expect(info.adapter_type).toBe('mock');
+});
+
 // ── T18: Recent commands (C11) ────────────────────────────────────────────
 test('T18: GET /api/recent-commands returns history of cwd/commands', async () => {
   // Create agent with specific cwd

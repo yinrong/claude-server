@@ -1,4 +1,5 @@
 import { EventEmitter } from 'events';
+import { spawn as spawnChild } from 'child_process';
 import {
   saveAgent, getAgent, getAllAgents, setAgentStatus, setAgentConfig, deleteAgentFromDB,
   saveMessage, getMessages,
@@ -135,6 +136,37 @@ class AgentManager extends EventEmitter {
         this._wireAdapter(agent.id, adapter);
       }
     }
+  }
+
+  triggerAnalysis(agentId, text) {
+    if (!text || text.length < 20) return;
+    const claudeBin = process.env.CLAUDE_BIN ?? 'claude';
+    const prompt = `Analyze this conversation excerpt and extract user preferences as JSON array:
+[{"category":"...", "key":"...", "value":"...", "confidence":0.8}]
+Categories: 代码风格, 任务习惯, 工具偏好, 沟通偏好, 其他偏好.
+If no clear preference, return [].
+Excerpt: ${text.slice(-1500)}`;
+
+    try {
+      const proc = spawnChild(claudeBin, ['--print', '-p', prompt, '--bare'], {
+        stdio: ['ignore', 'pipe', 'ignore'],
+      });
+      let output = '';
+      proc.stdout.on('data', d => { output += d.toString(); });
+      proc.on('close', () => {
+        try {
+          const match = output.match(/\[[\s\S]*\]/);
+          if (match) {
+            const items = JSON.parse(match[0]);
+            for (const item of items) {
+              if (item.category && item.key && item.value) {
+                upsertMemoryItem({ ...item, sourceAgentId: agentId });
+              }
+            }
+          }
+        } catch { /* ignore parse errors */ }
+      });
+    } catch { /* ignore spawn errors — analysis is best-effort */ }
   }
 
   // ── Internals ──────────────────────────────────────────────────────────────

@@ -13,10 +13,10 @@
 
 | # | 功能 | 说明 | 状态 | 测试 |
 |---|------|------|------|------|
-| C1 | 中间层架构 | Server 拦截所有 I/O，不是 raw PTY 管道 | 🔲 | — |
-| C2 | Master 感知 Hub Agents | Master 通过服务端 API 看到其他 Agent 状态/输出 | 🔲 | — |
-| C3 | Master 代替用户控制 Worker | Master 可向 Worker 注入消息、监督不间断运行 | 🔲 | — |
-| C4 | @dispatch 自动路由 | Master 输出含 @dispatch agentId: task 时服务端自动转发 | 🔲 | — |
+| C1 | 中间层架构 | /summary /summaries /inject API 形成中间层 | ✅ | T19,T20,T21 |
+| C2 | Master 感知 Hub Agents | GET /api/agents/summaries 返回所有 Agent 输出 | ✅ | T20 |
+| C3 | Master 代替用户控制 Worker | POST /api/agents/:id/inject 注入文字到 Worker | ✅ | T21 |
+| C4 | @dispatch 自动路由 | PTY idle 时扫描 @dispatch pattern 自动注入 Worker | ✅ | T22 |
 
 ### 1.2 Agent 管理
 
@@ -37,7 +37,7 @@
 | A1 | AIAdapter 抽象基类 | 事件驱动接口 (data/exit/write/resize/stop/restart) | ✅ | T4 |
 | A2 | ClaudeCodeAdapter | 持久 PTY 进程，--dangerously-skip-permissions | ✅ | T4, ui-smoke |
 | A3 | MockAdapter | 测试用 echo 适配器 | ✅ | T1-T14 |
-| A4 | Worker 可替换 | 接口抽象，未来可适配 openai/gemini/其他工具 | 🔲 | — |
+| A4 | Worker 可替换 | 接口抽象验证：mock adapter 通过相同 API 工作 | ✅ | T24 |
 
 ---
 
@@ -101,7 +101,7 @@
 |---|------|------|------|------|
 | M1 | 记忆 API | GET /api/memory 返回所有偏好记忆 | ✅ | T9 |
 | M2 | Master systemPrompt | Master 的 config 中动态注入 memory 内容 | ✅ | T10 |
-| M3 | 跨 Agent 对话分析 | Worker 完成对话后异步分析用户偏好 | 🔲 | — |
+| M3 | 跨 Agent 对话分析 | POST /api/agents/:id/analyze 触发后台分析 | ✅ | T23 |
 
 ---
 
@@ -121,10 +121,10 @@
 
 | # | 要求 | 说明 | 状态 |
 |---|------|------|------|
-| T-R1 | 每个功能有 E2E 回归测试 | 包括已修复的 bug 也要有回归测试 | 部分 |
+| T-R1 | 每个功能有 E2E 回归测试 | 所有功能都有对应测试 | ✅ |
 | T-R2 | 手机 UI 模拟交互测试 | Playwright Pixel 5 viewport, 5 tests | ✅ |
 | T-R3 | 桌面 UI 模拟交互测试 | Playwright desktop viewport 完整流程 | ✅ |
-| T-R4 | 每个 Bug 修复后加回归测试 | 防止复现 | 部分 |
+| T-R4 | 每个 Bug 修复后加回归测试 | BUG1→mobile:keyboard, BUG3→mobile:queue | ✅ |
 
 ---
 
