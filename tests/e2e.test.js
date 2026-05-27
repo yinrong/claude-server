@@ -379,6 +379,44 @@ test('T21: POST /api/agents/:id/inject sends text to PTY', async () => {
   ws.close();
 });
 
+// ── T22: @dispatch auto-routing from Master to Worker ─────────────────────
+test('T22: Master output with @dispatch injects into Worker', async () => {
+  // Create a "master" and a "worker"
+  const masterRes = await fetch(`${BASE}/api/agents`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: 'DispMaster', type: 'master', adapterType: 'mock' }),
+  });
+  const master = await masterRes.json();
+
+  const workerRes = await fetch(`${BASE}/api/agents`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: 'DispWorker', type: 'worker', adapterType: 'mock' }),
+  });
+  const worker = await workerRes.json();
+
+  // Subscribe to worker output
+  const wsWorker = await wsConnect(worker.id);
+  await nextMsg(wsWorker, 5000);
+  const workerOutputs = [];
+  wsWorker.on('message', d => { try { const m = JSON.parse(d); if (m.type === 'output') workerOutputs.push(m.data); } catch {} });
+
+  // Send message to master that will trigger mock echo containing @dispatch
+  const wsMaster = await wsConnect(master.id);
+  await nextMsg(wsMaster, 5000);
+  // Mock adapter echoes back, so we send text that contains @dispatch pattern
+  wsMaster.send(JSON.stringify({ type: 'input', data: `@dispatch ${worker.id}: DO_THE_TASK\n` }));
+
+  // Wait for idle timer (2s) + dispatch propagation
+  await sleep(3000);
+
+  // Worker should have received the injected task
+  const combined = workerOutputs.join('');
+  expect(combined).toContain('DO_THE_TASK');
+
+  wsMaster.close();
+  wsWorker.close();
+});
+
 // ── T18: Recent commands (C11) ────────────────────────────────────────────
 test('T18: GET /api/recent-commands returns history of cwd/commands', async () => {
   // Create agent with specific cwd

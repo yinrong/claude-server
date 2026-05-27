@@ -143,26 +143,50 @@ class AgentManager extends EventEmitter {
     const session = this._sessions.get(agentId);
     if (session) session.waitingForInput = false;
     let idleTimer = null;
+    let outputBuffer = '';
 
     adapter.on('data', (data) => {
       appendOutput(agentId, data);
       this._broadcast(agentId, { type: 'output', data });
 
-      // Detect idle/waiting state: if no output for 2 seconds after a prompt-like character
+      // Idle detection
       if (session) {
         session.waitingForInput = false;
         clearTimeout(idleTimer);
         idleTimer = setTimeout(() => {
           session.waitingForInput = true;
           this._broadcast(agentId, { type: 'status', agentId, waitingForInput: true });
+
+          // @dispatch detection: when agent goes idle, scan recent output for dispatch commands
+          this._checkDispatch(agentId, outputBuffer);
+          outputBuffer = '';
         }, 2000);
       }
+
+      // Accumulate output for dispatch scanning (keep last 4KB)
+      outputBuffer += data;
+      if (outputBuffer.length > 4096) outputBuffer = outputBuffer.slice(-4096);
     });
     adapter.on('exit', (code) => {
       if (session) session.waitingForInput = false;
       setAgentStatus(agentId, 'stopped');
       this._broadcast(agentId, { type: 'exit', code });
     });
+  }
+
+  _checkDispatch(fromAgentId, text) {
+    // Strip ANSI codes for reliable pattern matching
+    const clean = text.replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '');
+    const re = /@dispatch\s+([\w-]+):\s*(.+)/g;
+    let m;
+    while ((m = re.exec(clean)) !== null) {
+      const toAgentId = m[1].trim();
+      const task = m[2].trim();
+      if (this._sessions.has(toAgentId)) {
+        this.writeRaw(toAgentId, task + '\n');
+        this._broadcast(fromAgentId, { type: 'dispatched', toAgentId, task });
+      }
+    }
   }
 
   _broadcast(agentId, msg) {
