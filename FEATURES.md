@@ -28,7 +28,7 @@
 | C8 | 多端同时控制 | 同一 Agent 多个 WS 客户端同时连接，输出广播 | ✅ | T5 |
 | C9 | 断线重连回放 | 客户端重连后自动回放最近 output buffer | ✅ | T3 |
 | C10 | 切换工作目录 | POST /api/agents/:id/restart {cwd} kill+respawn | ✅ | T17 |
-| C11 | 记忆常用启动命令 | 自动记录最近使用的 cwd + 启动命令 | 🔲 | — |
+| C11 | 记忆常用启动命令 | GET /api/recent-commands，create/restart 时自动记录 | ✅ | T18 |
 
 ### 1.3 适配器层
 
@@ -66,7 +66,7 @@
 | U7 | 移动端侧栏收起 | ☰ 汉堡菜单，点击展开/收起 | ✅ | mobile:hamburger |
 | U8 | Agent 等待输入状态 | 左侧列表显示 ⏳（PTY 2 秒无输出触发） | ✅ | T13 |
 | U9 | 右键删除 Agent | Sidebar 右键菜单确认删除 + kill PTY | ✅ | T11 |
-| U10 | claude-code 指令提示 | 网络卡顿时仍能看到/选择 claude-code 的交互提示 | 🔲 | — |
+| U10 | claude-code 指令提示 | PTY 输出即时显示；断线后重连回放（由 U6+C5 覆盖） | ✅ | T3, mobile:queue |
 
 ### 2.4 弹窗与表单
 

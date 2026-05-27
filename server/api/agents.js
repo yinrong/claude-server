@@ -9,6 +9,19 @@ router.get('/', (_req, res) => {
   res.json(agentManager.listAgents());
 });
 
+// GET /api/agents/summaries — all agents' recent output (for Master to see)
+// Must be BEFORE /:id to avoid "summaries" being treated as an id
+router.get('/summaries', (_req, res) => {
+  const agents = agentManager.listAgents();
+  const summaries = agents.map(a => {
+    const chunks = getRecentOutput(a.id, 50);
+    const text = chunks.join('').replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '');
+    return { agentId: a.id, name: a.name, type: a.type, alive: a.alive,
+      waitingForInput: a.waitingForInput, text: text.slice(-1000) };
+  });
+  res.json(summaries);
+});
+
 // POST /api/agents
 router.post('/', (req, res) => {
   const { name, type, adapterType, config } = req.body ?? {};
@@ -35,7 +48,7 @@ router.delete('/:id', (req, res) => {
   res.json({ ok: true });
 });
 
-// GET /api/agents/:id/history — paginated output buffer
+// GET /api/agents/:id/history
 router.get('/:id/history', (req, res) => {
   const { id } = req.params;
   const limit = Math.min(parseInt(req.query.limit) || 500, 5000);
@@ -45,21 +58,34 @@ router.get('/:id/history', (req, res) => {
   res.json({ chunks, total, limit, offset });
 });
 
-// POST /api/agents/:id/restart — restart agent with new config (cwd change)
+// GET /api/agents/:id/summary
+router.get('/:id/summary', (req, res) => {
+  const chunks = getRecentOutput(req.params.id, 100);
+  const text = chunks.join('').replace(/\x1b\[[0-9;]*[a-zA-Z]/g, '');
+  res.json({ agentId: req.params.id, text: text.slice(-2000) });
+});
+
+// POST /api/agents/:id/restart
 router.post('/:id/restart', (req, res) => {
   const { id } = req.params;
   const { cwd } = req.body ?? {};
   const agent = agentManager.getAgent(id);
   if (!agent) return res.status(404).json({ error: 'not found' });
-
   const newConfig = { ...agent.config, ...(cwd ? { cwd } : {}) };
   agentManager.restartAgent(id, newConfig);
   res.json({ ok: true, cwd: newConfig.cwd });
 });
 
-// GET /api/memory
-router.get('/memory/all', (_req, res) => {
-  res.json(getAllMemory());
+// POST /api/agents/:id/inject — Master injects text into Worker's PTY
+router.post('/:id/inject', (req, res) => {
+  const { text } = req.body ?? {};
+  if (!text) return res.status(400).json({ error: 'text required' });
+  try {
+    agentManager.writeRaw(req.params.id, text);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(404).json({ error: err.message });
+  }
 });
 
 export default router;

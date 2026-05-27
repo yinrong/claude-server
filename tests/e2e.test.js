@@ -314,6 +314,71 @@ test('T17: POST /api/agents/:id/restart changes cwd and restarts', async () => {
   expect(info.config.cwd).toBe('/tmp');
 });
 
+// ── T19: Agent output summary API (middleware layer for Master) ────────────
+test('T19: GET /api/agents/:id/summary returns recent text output', async () => {
+  const agentId = await createAgent();
+  const ws = await wsConnect(agentId);
+  await nextMsg(ws, 5000);
+  ws.send(JSON.stringify({ type: 'input', data: 'SUMMARY_TEST\n' }));
+  await sleep(500);
+  ws.close();
+
+  const res = await fetch(`${BASE}/api/agents/${agentId}/summary`);
+  expect(res.status).toBe(200);
+  const body = await res.json();
+  expect(body).toHaveProperty('text');
+  expect(body.text).toContain('SUMMARY_TEST');
+});
+
+// ── T20: Master can see all agents' summaries ─────────────────────────────
+test('T20: GET /api/agents/summaries returns all agents text', async () => {
+  const a1 = await createAgent({ name: 'W1' });
+  const a2 = await createAgent({ name: 'W2' });
+
+  // Generate output in both
+  const ws1 = await wsConnect(a1);
+  await nextMsg(ws1, 5000);
+  ws1.send(JSON.stringify({ type: 'input', data: 'OUTPUT_A1\n' }));
+  await sleep(300);
+  ws1.close();
+
+  const ws2 = await wsConnect(a2);
+  await nextMsg(ws2, 5000);
+  ws2.send(JSON.stringify({ type: 'input', data: 'OUTPUT_A2\n' }));
+  await sleep(300);
+  ws2.close();
+
+  const res = await fetch(`${BASE}/api/agents/summaries`);
+  expect(res.status).toBe(200);
+  const body = await res.json();
+  expect(Array.isArray(body)).toBe(true);
+  const texts = body.map(s => s.text).join(' ');
+  expect(texts).toContain('OUTPUT_A1');
+  expect(texts).toContain('OUTPUT_A2');
+});
+
+// ── T21: Master can inject message into Worker via API ────────────────────
+test('T21: POST /api/agents/:id/inject sends text to PTY', async () => {
+  const agentId = await createAgent();
+  const ws = await wsConnect(agentId);
+  await nextMsg(ws, 5000);
+
+  const outputs = [];
+  ws.on('message', d => { try { const m = JSON.parse(d); if (m.type === 'output') outputs.push(m.data); } catch {} });
+
+  // Inject via API (simulates Master controlling Worker)
+  const res = await fetch(`${BASE}/api/agents/${agentId}/inject`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text: 'INJECTED_BY_MASTER\n' }),
+  });
+  expect(res.status).toBe(200);
+
+  await sleep(500);
+  expect(outputs.join('')).toContain('INJECTED_BY_MASTER');
+  ws.close();
+});
+
 // ── T18: Recent commands (C11) ────────────────────────────────────────────
 test('T18: GET /api/recent-commands returns history of cwd/commands', async () => {
   // Create agent with specific cwd
