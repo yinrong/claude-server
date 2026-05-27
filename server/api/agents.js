@@ -45,6 +45,18 @@ router.get('/:id/history', (req, res) => {
   res.json({ chunks, total, limit, offset });
 });
 
+// POST /api/agents/:id/restart — restart agent with new config (cwd change)
+router.post('/:id/restart', (req, res) => {
+  const { id } = req.params;
+  const { cwd } = req.body ?? {};
+  const agent = agentManager.getAgent(id);
+  if (!agent) return res.status(404).json({ error: 'not found' });
+
+  const newConfig = { ...agent.config, ...(cwd ? { cwd } : {}) };
+  agentManager.restartAgent(id, newConfig);
+  res.json({ ok: true, cwd: newConfig.cwd });
+});
+
 // GET /api/memory
 router.get('/memory/all', (_req, res) => {
   res.json(getAllMemory());

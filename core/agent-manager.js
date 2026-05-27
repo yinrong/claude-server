@@ -51,6 +51,17 @@ class AgentManager extends EventEmitter {
     });
   }
 
+  restartAgent(agentId, newConfig) {
+    const session = this._sessions.get(agentId);
+    if (!session) throw new Error(`Agent ${agentId} not found`);
+    session.adapter.restart(newConfig);
+    setAgentConfig(agentId, newConfig);
+    session.config.config = newConfig;
+    // Re-wire the adapter events (old listeners are on the dead PTY)
+    this._wireAdapter(agentId, session.adapter);
+    this._broadcast(agentId, { type: 'status', agentId, restarted: true, cwd: newConfig.cwd });
+  }
+
   deleteAgent(agentId) {
     const session = this._sessions.get(agentId);
     if (session) {

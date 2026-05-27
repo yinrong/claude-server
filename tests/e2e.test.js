@@ -281,3 +281,25 @@ test('T16: GET /api/readfile returns file content', async ({ request }) => {
   expect(body).toHaveProperty('content');
   expect(body.content.length).toBeGreaterThan(0);
 });
+
+// ── T17: Restart agent with new cwd ──────────────────────────────────────
+test('T17: POST /api/agents/:id/restart changes cwd and restarts', async () => {
+  const agentId = await createAgent();
+  await sleep(300);
+
+  const res = await fetch(`${BASE}/api/agents/${agentId}/restart`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ cwd: '/tmp' }),
+  });
+  expect(res.status).toBe(200);
+  const body = await res.json();
+  expect(body.ok).toBe(true);
+  expect(body.cwd).toBe('/tmp');
+
+  // Agent should still be alive after restart
+  await sleep(500);
+  const info = await (await fetch(`${BASE}/api/agents/${agentId}`)).json();
+  expect(info.alive).toBe(true);
+  expect(info.config.cwd).toBe('/tmp');
+});
