@@ -3,80 +3,167 @@
 > 本文件是项目功能的 single source of truth。每次需求变动必须同步更新。
 > 每个功能都必须有对应的 E2E 回归测试。
 
----
-
-## 核心功能
-
-| # | 功能 | 说明 | 测试覆盖 |
-|---|------|------|---------|
-| C1 | 多 Agent 管理 | 创建/列出/查看 Agent（Master/Worker） | T2 |
-| C2 | PTY 交互模式 | 完整 claude-code 交互，支持所有 slash commands | ui-smoke:完整用户流程 |
-| C3 | 服务端持久运行 | Agent 进程不受客户端断开影响，PM2 管理 | T6 |
-| C4 | 多端同时控制 | 同一 Agent 多个 WS 客户端同时连接，输出广播 | T5 |
-| C5 | 断线重连回放 | 客户端重连后自动回放最近 output buffer | T3 |
-| C6 | 多轮对话上下文 | 对话历史正确传递，不同问题得到不同回答 | ui-smoke:回归多轮对话 |
-
-## 文件/图片
-
-| # | 功能 | 说明 | 测试覆盖 |
-|---|------|------|---------|
-| F1 | 文件上传 | POST /api/files 上传 base64 文件 | T7 |
-| F2 | 文件消息 | 消息中引用 fileId，存储+广播 | T8 |
-| F3 | 图片粘贴 | Ctrl+V 粘贴图片 → 上传 → 路径注入 PTY | ui-smoke:完整用户流程 |
-| F4 | 文件选择器 | 📎 按钮选文件 → 上传 → 路径注入 PTY | ui-smoke:完整用户流程 |
-
-## Master 记忆系统
-
-| # | 功能 | 说明 | 测试覆盖 |
-|---|------|------|---------|
-| M1 | 记忆 API | GET /api/memory 返回所有偏好记忆 | T9 |
-| M2 | Master systemPrompt | Master 的 config 中动态注入 memory 内容 | T10 |
-| M3 | @dispatch 自动路由 | Master 输出含 @dispatch agentId: task 时自动转发 | (待补) |
-| M4 | 跨 Agent 对话分析 | Worker 完成对话后异步分析用户偏好 | (待补) |
-
-## UI / 响应式
-
-| # | 功能 | 说明 | 测试覆盖 |
-|---|------|------|---------|
-| U1 | xterm.js 终端渲染 | 完整 ANSI 颜色、进度条、diff 显示 | ui-smoke:完整用户流程 |
-| U2 | 移动端侧栏收起 | ☰ 汉堡菜单，点击展开/收起 | (手动验证) |
-| U3 | 底部输入栏 | 独立 textarea，Enter 发送，适配手机键盘 | (手动验证) |
-| U4 | 自适应终端尺寸 | fitAddon 自动调整 cols/rows，resize 通知 PTY | (手动验证) |
-| U5 | 新建 Agent 弹窗 | Modal 表单创建 Agent（点空白不关闭，ESC/取消才关） | ui-smoke:完整用户流程 |
-| U6 | 右键删除 Agent | Sidebar 右键菜单确认删除 + kill PTY | T11 |
-| U7 | 目录浏览器 | 新建 Agent 时可点击浏览服务器目录 | T12 |
-| U8 | Agent 等待输入状态 | 左侧列表显示 ⏳ 等待输入（PTY 2 秒无输出触发） | T13 |
-
-## 适配器层
-
-| # | 功能 | 说明 | 测试覆盖 |
-|---|------|------|---------|
-| A1 | AIAdapter 抽象基类 | 事件驱动接口 (data/exit/write/resize/stop/restart) | T4 |
-| A2 | ClaudeCodeAdapter | 持久 PTY 进程，--dangerously-skip-permissions | T4, ui-smoke |
-| A3 | MockAdapter | 测试用 echo 适配器 | T1-T10 |
-
-## 基础设施
-
-| # | 功能 | 说明 | 测试覆盖 |
-|---|------|------|---------|
-| I1 | HTTP API | /api/agents, /api/files, /api/memory | T1, T2, T7, T9 |
-| I2 | WebSocket 协议 | /ws?agentId= 连接，input/resize/output/history | T3-T5 |
-| I3 | SQLite 持久化 | agents, output_buffer, files, memory 四张表 | T2-T10 |
-| I4 | PM2 进程管理 | ecosystem.config.cjs, prod(4280) + dev(4281) | (部署验证) |
-| I5 | 多环境隔离 | prod/dev 用不同端口+不同 DB，代码更新只重启 dev | T14 |
+状态：✅ 测试通过 | ⚠️ 已实现未测试 | ❌ 失效/Bug | 🔲 未实现
 
 ---
 
-## 待开发 / 计划中
+## 1. 核心架构
 
-| # | 功能 | 说明 | 优先级 |
-|---|------|------|--------|
-| ~~P1~~ | ~~右键删除 Agent~~ | ✅ 已实现 → U6 | |
-| ~~P2~~ | ~~目录浏览器~~ | ✅ 已实现 → U7 | |
-| ~~P3~~ | ~~新建弹窗点击空白不关闭~~ | ✅ 已实现 → U5 | |
-| ~~P4~~ | ~~Agent 等待输入状态~~ | ✅ 已实现 → U8 | |
-| ~~P5~~ | ~~多环境 (dev/prod)~~ | ✅ 已实现 → I5 | |
-| P6 | 切换工作目录 | toolbar 按钮，退出 claude 重新 cd && claude | 中 |
-| P7 | 记忆常用启动命令 | 自动记录最近使用的 cwd + 命令 | 中 |
-| P8 | @dispatch E2E 测试 | 自动路由的端到端验证 | 低 |
-| P9 | 跨 Agent 分析 E2E | 对话分析 + 记忆写入验证 | 低 |
+### 1.1 中间层 Server
+
+| # | 功能 | 说明 | 状态 | 测试 |
+|---|------|------|------|------|
+| C1 | 中间层架构 | Server 拦截所有 I/O，不是 raw PTY 管道 | 🔲 | — |
+| C2 | Master 感知 Hub Agents | Master 通过服务端 API 看到其他 Agent 状态/输出 | 🔲 | — |
+| C3 | Master 代替用户控制 Worker | Master 可向 Worker 注入消息、监督不间断运行 | 🔲 | — |
+| C4 | @dispatch 自动路由 | Master 输出含 @dispatch agentId: task 时服务端自动转发 | 🔲 | — |
+
+### 1.2 Agent 管理
+
+| # | 功能 | 说明 | 状态 | 测试 |
+|---|------|------|------|------|
+| C5 | 多 Agent 管理 | 创建/列出/查看/删除 Agent（Master/Worker） | ✅ | T2, T11 |
+| C6 | PTY 交互模式 | 完整 claude-code 交互，支持所有 slash commands | ✅ | ui-smoke |
+| C7 | 服务端持久运行 | Agent 进程不受客户端断开影响 | ✅ | T6 |
+| C8 | 多端同时控制 | 同一 Agent 多个 WS 客户端同时连接，输出广播 | ✅ | T5 |
+| C9 | 断线重连回放 | 客户端重连后自动回放最近 output buffer | ✅ | T3 |
+| C10 | 切换工作目录 | toolbar 按钮，退出 claude 重新 cd && claude，弹窗可编辑命令 | 🔲 | — |
+| C11 | 记忆常用启动命令 | 自动记录最近使用的 cwd + 启动命令 | 🔲 | — |
+
+### 1.3 适配器层
+
+| # | 功能 | 说明 | 状态 | 测试 |
+|---|------|------|------|------|
+| A1 | AIAdapter 抽象基类 | 事件驱动接口 (data/exit/write/resize/stop/restart) | ✅ | T4 |
+| A2 | ClaudeCodeAdapter | 持久 PTY 进程，--dangerously-skip-permissions | ✅ | T4, ui-smoke |
+| A3 | MockAdapter | 测试用 echo 适配器 | ✅ | T1-T14 |
+| A4 | Worker 可替换 | 接口抽象，未来可适配 openai/gemini/其他工具 | 🔲 | — |
+
+---
+
+## 2. UI 交互
+
+### 2.1 终端渲染
+
+| # | 功能 | 说明 | 状态 | 测试 |
+|---|------|------|------|------|
+| U1 | xterm.js 终端渲染 | 完整 ANSI 颜色、进度条、diff 显示 | ✅ | ui-smoke |
+| U2 | 自适应终端尺寸 | fitAddon 自动调整 cols/rows，resize 通知 PTY | ⚠️ | — |
+| U3 | Worker 历史浏览 | 方便地查看一个 worker 的完整历史输出 | 🔲 | — |
+
+### 2.2 输入
+
+| # | 功能 | 说明 | 状态 | 测试 |
+|---|------|------|------|------|
+| U4 | 底部输入栏 | 独立 textarea，Enter 发送 | ⚠️ | — |
+| U5 | 手机键盘输入 | 手机端键盘能正常输入文字 | ❌ 失效 | — |
+| U6 | UI 与网络解耦 | 输入/切换等 UI 操作不因网络卡顿而卡死 | 🔲 | — |
+
+### 2.3 侧栏与导航
+
+| # | 功能 | 说明 | 状态 | 测试 |
+|---|------|------|------|------|
+| U7 | 移动端侧栏收起 | ☰ 汉堡菜单，点击展开/收起 | ⚠️ | — |
+| U8 | Agent 等待输入状态 | 左侧列表显示 ⏳（PTY 2 秒无输出触发） | ✅ | T13 |
+| U9 | 右键删除 Agent | Sidebar 右键菜单确认删除 + kill PTY | ✅ | T11 |
+| U10 | claude-code 指令提示 | 网络卡顿时仍能看到/选择 claude-code 的交互提示 | 🔲 | — |
+
+### 2.4 弹窗与表单
+
+| # | 功能 | 说明 | 状态 | 测试 |
+|---|------|------|------|------|
+| U11 | 新建 Agent 弹窗 | Modal 表单（点空白不关闭，ESC/取消才关） | ⚠️ | — |
+| U12 | 目录浏览器 | 新建 Agent 时可点击浏览服务器目录 | ✅ | T12 |
+
+### 2.5 文件浏览
+
+| # | 功能 | 说明 | 状态 | 测试 |
+|---|------|------|------|------|
+| U13 | 浏览服务器文件 | 方便地浏览远程文件系统目录结构 | 🔲 | — |
+| U14 | 阅读文件内容 | 点击文件可查看内容（代码高亮） | 🔲 | — |
+
+---
+
+## 3. 文件/图片
+
+| # | 功能 | 说明 | 状态 | 测试 |
+|---|------|------|------|------|
+| F1 | 文件上传 | POST /api/files 上传 base64 文件 | ✅ | T7 |
+| F2 | 文件消息 | 消息中引用 fileId，路径注入 PTY | ✅ | T8 |
+| F3 | 图片粘贴 | Ctrl+V 粘贴图片 → 上传 → 路径注入 PTY | ⚠️ | — |
+| F4 | 文件选择器 | 📎 按钮选文件 → 上传 → 路径注入 PTY | ⚠️ | — |
+
+---
+
+## 4. Master 记忆系统
+
+| # | 功能 | 说明 | 状态 | 测试 |
+|---|------|------|------|------|
+| M1 | 记忆 API | GET /api/memory 返回所有偏好记忆 | ✅ | T9 |
+| M2 | Master systemPrompt | Master 的 config 中动态注入 memory 内容 | ✅ | T10 |
+| M3 | 跨 Agent 对话分析 | Worker 完成对话后异步分析用户偏好 | 🔲 | — |
+
+---
+
+## 5. 基础设施
+
+| # | 功能 | 说明 | 状态 | 测试 |
+|---|------|------|------|------|
+| I1 | HTTP API | /api/agents, /api/files, /api/memory, /api/browse | ✅ | T1,T2,T7,T9,T12 |
+| I2 | WebSocket 协议 | /ws?agentId= input/resize/output/history/status | ✅ | T3-T5 |
+| I3 | SQLite 持久化 | agents, output_buffer, files, memory | ✅ | T2-T14 |
+| I4 | PM2 进程管理 | prod(4280) + dev(4281) 分别管理 | ⚠️ | — |
+| I5 | 多环境隔离 | prod/dev 不同端口+DB，代码更新只重启 dev | ✅ | T14 |
+
+---
+
+## 6. 测试要求
+
+| # | 要求 | 说明 | 状态 |
+|---|------|------|------|
+| T-R1 | 每个功能有 E2E 回归测试 | 包括已修复的 bug 也要有回归测试 | 部分 |
+| T-R2 | 手机 UI 模拟交互测试 | Playwright mobile viewport 模拟触摸/键盘 | 🔲 |
+| T-R3 | 桌面 UI 模拟交互测试 | Playwright desktop viewport 完整流程 | ✅ |
+| T-R4 | 每个 Bug 修复后加回归测试 | 防止复现 | 部分 |
+
+---
+
+## 7. Roadmap
+
+### Phase 1 — 紧急修复（当前）
+| 顺序 | 目标 | 涉及功能 |
+|------|------|---------|
+| 1 | 修复手机键盘输入 | U5, BUG1 |
+| 2 | UI 与网络解耦 | U6, U10, BUG3 |
+| 3 | 手机 UI 回归测试 | T-R2 |
+
+### Phase 2 — 核心体验补全
+| 顺序 | 目标 | 涉及功能 |
+|------|------|---------|
+| 4 | Worker 历史浏览 | U3 |
+| 5 | 文件浏览与阅读 | U13, U14 |
+| 6 | 切换工作目录 + 记忆常用命令 | C10, C11 |
+
+### Phase 3 — 中间层 & Master 控制
+| 顺序 | 目标 | 涉及功能 |
+|------|------|---------|
+| 7 | 中间层架构实现 | C1 |
+| 8 | Master 感知 Hub Agents | C2, C3 |
+| 9 | @dispatch 自动路由 | C4 |
+| 10 | 跨 Agent 对话分析 + 记忆提取 | M3 |
+
+### Phase 4 — 扩展
+| 顺序 | 目标 | 涉及功能 |
+|------|------|---------|
+| 11 | Worker 可替换验证（非 claude adapter） | A4 |
+| 12 | 记忆常用启动命令 | C11 |
+
+---
+
+## 8. 已知 Bug
+
+| # | 问题 | 原因 | 优先级 | 回归测试 |
+|---|------|------|--------|---------|
+| BUG1 | 手机键盘输入失效 (U5) | UI 重构后 xterm + textarea focus/事件冲突 | 高 | 🔲 待加 |
+| BUG2 | Master 无法感知 Hub 内 Agent (C1-C3) | PTY 纯管道，服务端不拦截语义 | 高 | 🔲 待加 |
+| BUG3 | 网络卡顿时 UI 操作卡死 (U6) | UI 操作与 WS 发送同步耦合 | 高 | 🔲 待加 |
