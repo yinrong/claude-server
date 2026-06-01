@@ -126,21 +126,6 @@ test('mobile: switching agent updates UI immediately', async ({ page }) => {
   expect(label).not.toBe('未选择 Agent');
 });
 
-// ── U15: virtual key bar exists with special keys ─────────────────────────
-test('mobile: virtual key bar has Enter/Ctrl+C/arrow buttons', async ({ page }) => {
-  await page.goto(BASE);
-  await page.waitForLoadState('networkidle');
-
-  const keybar = page.locator('#keybar');
-  await expect(keybar).toBeVisible();
-
-  // Check key buttons exist
-  await expect(page.locator('#keybar button[data-key="enter"]')).toBeVisible();
-  await expect(page.locator('#keybar button[data-key="ctrl-c"]')).toBeVisible();
-  await expect(page.locator('#keybar button[data-key="up"]')).toBeVisible();
-  await expect(page.locator('#keybar button[data-key="down"]')).toBeVisible();
-  await expect(page.locator('#keybar button[data-key="tab"]')).toBeVisible();
-});
 
 // ── U15: pressing virtual Enter sends \r to PTY ──────────────────────────
 test('mobile: virtual Enter button sends to PTY', async ({ page }) => {
@@ -195,15 +180,23 @@ test('mobile: attach button is visible', async ({ page }) => {
   await expect(page.locator('#btn-attach')).toBeVisible();
 });
 
-// ── U15: keybar is visible ────────────────────────────────────────────────
-test('mobile: virtual keybar is visible with all buttons', async ({ page }) => {
+// ── U15: keybar is visible with primary keys, extra keys fold ─────────────
+test('mobile: virtual keybar visible, extras behind toggle', async ({ page }) => {
   await page.goto(BASE);
   await page.waitForLoadState('networkidle');
 
+  // Primary keys always visible
   await expect(page.locator('#keybar')).toBeVisible();
   await expect(page.locator('#keybar button[data-key="enter"]')).toBeVisible();
-  await expect(page.locator('#keybar button[data-key="ctrl-c"]')).toBeVisible();
-  await expect(page.locator('#keybar button[data-key="up"]')).toBeVisible();
-  await expect(page.locator('#keybar button[data-key="tab"]')).toBeVisible();
   await expect(page.locator('#keybar button[data-key="esc"]')).toBeVisible();
+  await expect(page.locator('#keybar button[data-key="tab"]')).toBeVisible();
+  await expect(page.locator('#keybar button[data-key="up"]')).toBeVisible();
+
+  // Extra keys hidden by default
+  await expect(page.locator('#keybar-extra')).toHaveClass(/hidden/);
+
+  // Click "···" to expand
+  await page.click('#keybar-more');
+  await expect(page.locator('#keybar-extra')).not.toHaveClass(/hidden/);
+  await expect(page.locator('#keybar-extra button[data-key="ctrl-c"]')).toBeVisible();
 });

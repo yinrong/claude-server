@@ -109,6 +109,9 @@ const KEY_MAP = {
   'ctrl-c':  '\x03',
   'ctrl-z':  '\x1a',
   'ctrl-d':  '\x04',
+  'ctrl-l':  '\x0c',
+  'ctrl-a':  '\x01',
+  'ctrl-e':  '\x05',
   'tab':     '\t',
   'esc':     '\x1b',
   'up':      '\x1b[A',
@@ -117,14 +120,20 @@ const KEY_MAP = {
   'right':   '\x1b[C',
 };
 
-keybar.addEventListener('click', (e) => {
-  const btn = e.target.closest('button[data-key]');
+const keybarExtra = $('keybar-extra');
+
+// Toggle extra keys
+$('keybar-more').addEventListener('click', () => {
+  keybarExtra.classList.toggle('hidden');
+});
+
+// Handle all key button clicks (both bars)
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('#keybar button[data-key], #keybar-extra button[data-key]');
   if (!btn) return;
-  const key = btn.dataset.key;
-  const seq = KEY_MAP[key];
+  const seq = KEY_MAP[btn.dataset.key];
   if (seq) {
     queueSend({ type: 'input', data: seq });
-    // Keep terminal focused so user can continue typing
     term?.focus();
   }
 });

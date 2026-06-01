@@ -45,12 +45,16 @@ html, body, #app { height: 100%; background: #1e1e2e; color: #cdd6f4;
 
 /* ── Virtual key bar ── */
 #keybar { display: flex; gap: 4px; padding: 6px 8px; background: #181825;
-  border-top: 1px solid #313244; flex-shrink: 0; flex-wrap: wrap; justify-content: center; }
-#keybar button { background: #313244; color: #cdd6f4; border: 1px solid #45475a;
+  border-top: 1px solid #313244; flex-shrink: 0; align-items: center; }
+#keybar button, #keybar-extra button { background: #313244; color: #cdd6f4; border: 1px solid #45475a;
   border-radius: 6px; padding: 6px 10px; font-size: 13px; font-weight: 600;
   cursor: pointer; min-width: 36px; text-align: center; touch-action: manipulation; }
-#keybar button:active { background: #cba6f7; color: #1e1e2e; }
+#keybar button:active, #keybar-extra button:active { background: #cba6f7; color: #1e1e2e; }
 #keybar button[data-key="enter"] { background: #cba6f7; color: #1e1e2e; min-width: 56px; }
+#keybar-more { background: #27273a; border: 1px dashed #6c7086; color: #6c7086; }
+#keybar-extra { display: flex; gap: 4px; padding: 4px 8px; background: #11111b;
+  flex-shrink: 0; flex-wrap: wrap; }
+#keybar-extra.hidden { display: none; }
 
 .primary-btn { background: #cba6f7; color: #1e1e2e; border: none; border-radius: 8px;
   padding: 0 14px; font-weight: 700; cursor: pointer; font-size: 16px; min-height: 36px; }
