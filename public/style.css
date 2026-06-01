@@ -43,13 +43,15 @@ html, body, #app { height: 100%; background: #1e1e2e; color: #cdd6f4;
 #terminal-wrap { flex: 1; min-height: 0; overflow: hidden; }
 #terminal { height: 100%; }
 
-/* ── Input bar (for mobile-friendly text entry) ── */
-#input-bar { display: flex; gap: 6px; padding: 6px 10px;
-  background: #181825; border-top: 1px solid #313244; flex-shrink: 0; }
-#msg-input { flex: 1; background: #27273a; color: #cdd6f4; border: 1px solid #45475a;
-  border-radius: 8px; padding: 8px 12px; font-size: 14px; resize: none; outline: none;
-  font-family: inherit; line-height: 1.4; max-height: 120px; }
-#msg-input:focus { border-color: #cba6f7; }
+/* ── Virtual key bar ── */
+#keybar { display: flex; gap: 4px; padding: 6px 8px; background: #181825;
+  border-top: 1px solid #313244; flex-shrink: 0; flex-wrap: wrap; justify-content: center; }
+#keybar button { background: #313244; color: #cdd6f4; border: 1px solid #45475a;
+  border-radius: 6px; padding: 6px 10px; font-size: 13px; font-weight: 600;
+  cursor: pointer; min-width: 36px; text-align: center; touch-action: manipulation; }
+#keybar button:active { background: #cba6f7; color: #1e1e2e; }
+#keybar button[data-key="enter"] { background: #cba6f7; color: #1e1e2e; min-width: 56px; }
+
 .primary-btn { background: #cba6f7; color: #1e1e2e; border: none; border-radius: 8px;
   padding: 0 14px; font-weight: 700; cursor: pointer; font-size: 16px; min-height: 36px; }
 

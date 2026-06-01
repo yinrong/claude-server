@@ -37,10 +37,18 @@
       <div id="terminal"></div>
     </div>
 
-    <!-- Mobile-friendly input bar -->
-    <div id="input-bar">
-      <textarea id="msg-input" rows="1" placeholder="输入消息… Enter 发送"></textarea>
-      <button id="btn-send" class="primary-btn">↑</button>
+    <!-- Virtual key bar for special keys (mobile) -->
+    <div id="keybar">
+      <button data-key="enter" title="提交 (Enter)">Enter</button>
+      <button data-key="newline" title="换行">⏎</button>
+      <button data-key="ctrl-c" title="Ctrl+C">^C</button>
+      <button data-key="ctrl-z" title="Ctrl+Z">^Z</button>
+      <button data-key="tab" title="Tab">Tab</button>
+      <button data-key="esc" title="Escape">Esc</button>
+      <button data-key="up" title="↑">↑</button>
+      <button data-key="down" title="↓">↓</button>
+      <button data-key="left" title="←">←</button>
+      <button data-key="right" title="→">→</button>
     </div>
   </main>
 

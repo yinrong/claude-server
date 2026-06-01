@@ -3,8 +3,7 @@ let ws = null;
 let currentAgentId = null;
 let term = null;
 let fitAddon = null;
-const isMobile = () => window.innerWidth < 769;
-const sendQueue = []; // Messages queued when WS is disconnected
+const sendQueue = [];
 
 const WS_URL = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`;
 
@@ -16,37 +15,33 @@ const agentLabel   = $('agent-label');
 const agentBadge   = $('agent-type-badge');
 const connDot      = $('conn-dot');
 const termContainer = $('terminal');
-const msgInput     = $('msg-input');
-const btnSend      = $('btn-send');
 const btnNew       = $('btn-new-agent');
 const btnToggle    = $('btn-sidebar-toggle');
 const btnAttach    = $('btn-attach');
 const fileInput    = $('file-input');
 const modalOverlay = $('modal-overlay');
 const ctxMenu      = $('context-menu');
+const keybar       = $('keybar');
 
 // ── xterm.js ─────────────────────────────────────────────────────────────────
 function initTerminal() {
   if (term) term.dispose();
-  const mobile = isMobile();
   term = new Terminal({
     theme: { background: '#1e1e2e', foreground: '#cdd6f4', cursor: '#f5e0dc', selectionBackground: '#45475a' },
-    fontSize: mobile ? 12 : 14,
+    fontSize: window.innerWidth < 769 ? 12 : 14,
     fontFamily: '"JetBrains Mono", "Fira Code", "Cascadia Code", "Menlo", monospace',
     scrollback: 50000,
     cursorBlink: true,
-    // Mobile: disable xterm's built-in keyboard capture — input goes through bottom textarea only
-    disableStdin: mobile,
+    // Enable keyboard input on ALL devices (including mobile)
+    disableStdin: false,
   });
   fitAddon = new FitAddon.FitAddon();
   term.loadAddon(fitAddon);
   term.open(termContainer);
   fitAddon.fit();
 
-  // Desktop: forward xterm keyboard input to PTY
-  if (!mobile) {
-    term.onData(data => queueSend({ type: 'input', data }));
-  }
+  // Forward all keyboard input to PTY
+  term.onData(data => queueSend({ type: 'input', data }));
 
   window.addEventListener('resize', doFit);
 }
@@ -58,12 +53,10 @@ function doFit() {
 }
 
 // ── Message queue (network decoupling) ───────────────────────────────────────
-// UI operations never block. Messages queue when WS is down, flush on reconnect.
 function queueSend(msg) {
   if (ws?.readyState === WebSocket.OPEN) {
     ws.send(JSON.stringify(msg));
   } else {
-    // Queue non-resize messages (resize can be stale)
     if (msg.type !== 'resize') sendQueue.push(msg);
   }
 }
@@ -79,11 +72,7 @@ function connect(agentId) {
   if (ws) { ws.onclose = null; ws.close(); }
   currentAgentId = agentId;
   ws = new WebSocket(`${WS_URL}?agentId=${agentId}`);
-  ws.addEventListener('open', () => {
-    setConn(true);
-    flushQueue();
-    setTimeout(doFit, 100);
-  });
+  ws.addEventListener('open', () => { setConn(true); flushQueue(); setTimeout(doFit, 100); });
   ws.addEventListener('close', () => {
     setConn(false);
     setTimeout(() => { if (currentAgentId === agentId) connect(agentId); }, 3000);
@@ -113,6 +102,33 @@ function handleMsg(msg) {
   }
 }
 
+// ── Virtual key bar ──────────────────────────────────────────────────────────
+const KEY_MAP = {
+  'enter':   '\r',
+  'newline': '\n',
+  'ctrl-c':  '\x03',
+  'ctrl-z':  '\x1a',
+  'ctrl-d':  '\x04',
+  'tab':     '\t',
+  'esc':     '\x1b',
+  'up':      '\x1b[A',
+  'down':    '\x1b[B',
+  'left':    '\x1b[D',
+  'right':   '\x1b[C',
+};
+
+keybar.addEventListener('click', (e) => {
+  const btn = e.target.closest('button[data-key]');
+  if (!btn) return;
+  const key = btn.dataset.key;
+  const seq = KEY_MAP[key];
+  if (seq) {
+    queueSend({ type: 'input', data: seq });
+    // Keep terminal focused so user can continue typing
+    term?.focus();
+  }
+});
+
 // ── Agent management ─────────────────────────────────────────────────────────
 let allAgents = [];
 
@@ -128,14 +144,11 @@ function renderAgentList(agents) {
     const li = document.createElement('li');
     li.dataset.id = a.id;
     if (a.id === currentAgentId) li.classList.add('active');
-
     const statusIcon = !a.alive ? '○' : a.waitingForInput ? '⏳' : '●';
     const statusClass = !a.alive ? '' : a.waitingForInput ? 'waiting' : 'alive';
-    const statusText = !a.alive ? '停止' : a.waitingForInput ? '等待输入' : '运行中';
-
     li.innerHTML = `<div class="agent-name">${a.name}</div>
       <div class="agent-meta">${a.type === 'master' ? '<span class="master-tag">M</span> ' : ''}
-      <span class="${statusClass}" title="${statusText}">${statusIcon}</span></div>`;
+      <span class="${statusClass}">${statusIcon}</span></div>`;
     li.addEventListener('click', () => { switchAgent(a.id, a); closeSidebar(); });
     li.addEventListener('contextmenu', (e) => { e.preventDefault(); showContextMenu(e, a); });
     agentList.appendChild(li);
@@ -143,7 +156,6 @@ function renderAgentList(agents) {
 }
 
 function switchAgent(agentId, agentData) {
-  // Immediate UI update (no network dependency)
   for (const li of agentList.querySelectorAll('li'))
     li.classList.toggle('active', li.dataset.id === agentId);
   agentLabel.textContent = agentData?.name ?? agentId.slice(0, 8);
@@ -179,27 +191,7 @@ $('ctx-delete').addEventListener('click', async () => {
 function closeSidebar() { sidebar.classList.remove('open'); }
 btnToggle.addEventListener('click', () => sidebar.classList.toggle('open'));
 
-// ── Input bar ────────────────────────────────────────────────────────────────
-function sendInput() {
-  const text = msgInput.value;
-  if (!text) return;
-  queueSend({ type: 'input', data: text + '\n' });
-  msgInput.value = '';
-  msgInput.style.height = 'auto';
-  // Mobile: keep focus on the input bar (don't steal to xterm)
-  // Desktop: optionally refocus terminal
-  if (!isMobile()) term.focus();
-}
-btnSend.addEventListener('click', sendInput);
-msgInput.addEventListener('keydown', e => {
-  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendInput(); }
-});
-msgInput.addEventListener('input', () => {
-  msgInput.style.height = 'auto';
-  msgInput.style.height = Math.min(msgInput.scrollHeight, 120) + 'px';
-});
-
-// ── New agent modal (click blank does NOT close) ─────────────────────────────
+// ── New agent modal ──────────────────────────────────────────────────────────
 btnNew.addEventListener('click', () => {
   $('modal-name').value = '';
   $('modal-cwd').value = '/home';
@@ -235,7 +227,6 @@ async function loadBrowse(path) {
     const { entries } = await res.json();
     const list = $('browse-list');
     list.innerHTML = '';
-
     if (path !== '/') {
       const parent = path.split('/').slice(0, -1).join('/') || '/';
       const li = document.createElement('li');
@@ -243,7 +234,6 @@ async function loadBrowse(path) {
       li.addEventListener('click', () => { $('modal-cwd').value = parent; loadBrowse(parent); });
       list.appendChild(li);
     }
-
     for (const e of entries.sort((a, b) => a.name.localeCompare(b.name))) {
       const li = document.createElement('li');
       li.textContent = `📁 ${e.name}`;
@@ -251,7 +241,7 @@ async function loadBrowse(path) {
       li.addEventListener('click', () => { $('modal-cwd').value = full; loadBrowse(full); });
       list.appendChild(li);
     }
-  } catch { /* network error — non-blocking */ }
+  } catch {}
 }
 $('modal-cwd').addEventListener('change', () => loadBrowse($('modal-cwd').value));
 
@@ -265,7 +255,7 @@ fileInput.addEventListener('change', async () => {
         body: JSON.stringify({ data: dataUrl, name: file.name }) });
       const { path } = await res.json();
       queueSend({ type: 'input', data: path + '\n' });
-    } catch { /* queue for retry if needed */ }
+    } catch {}
   }
   fileInput.value = '';
 });
@@ -282,7 +272,7 @@ document.addEventListener('paste', async (e) => {
         body: JSON.stringify({ data: dataUrl, name: 'paste.png' }) });
       const { path } = await res.json();
       queueSend({ type: 'input', data: path + '\n' });
-    } catch { /* non-blocking */ }
+    } catch {}
     e.preventDefault();
   }
 });

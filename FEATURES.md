@@ -56,7 +56,8 @@
 | # | 功能 | 说明 | 状态 | 测试 |
 |---|------|------|------|------|
 | U4 | 底部输入栏 | 独立 textarea，Enter 发送 | ✅ | mobile:textarea |
-| U5 | 手机键盘输入 | 手机端通过底部 textarea 输入，xterm 禁用 stdin | ✅ | mobile:keyboard |
+| U5 | 手机键盘输入 | xterm 接收键盘输入 + 虚拟按键栏发送特殊键 | 🔲 | — |
+| U15 | 虚拟按键栏 | Enter/换行/Ctrl+C/↑↓←→/Tab/Esc 按钮，替代底部 textarea | 🔲 | — |
 | U6 | UI 与网络解耦 | 消息队列缓冲，WS 断开不丢输入，重连自动 flush | ✅ | mobile:queue |
 
 ### 2.3 侧栏与导航
