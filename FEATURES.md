@@ -27,7 +27,7 @@
 | C7 | 服务端持久运行 | Agent 进程不受客户端断开影响 | ✅ | T6 |
 | C8 | 多端同时控制 | 同一 Agent 多个 WS 客户端同时连接，输出广播 | ✅ | T5 |
 | C9 | 断线重连回放 | 客户端重连后自动回放最近 output buffer | ✅ | T3 |
-| C10 | 切换工作目录 | POST /api/agents/:id/restart {cwd} kill+respawn | ✅ | T17 |
+| C10 | 切换工作目录 | API ✅(T17)，前端：toolbar 按钮+弹窗 | 🔲 前端 | T17 |
 | C11 | 记忆常用启动命令 | GET /api/recent-commands，create/restart 时自动记录 | ✅ | T18 |
 
 ### 1.3 适配器层
@@ -48,16 +48,15 @@
 | # | 功能 | 说明 | 状态 | 测试 |
 |---|------|------|------|------|
 | U1 | xterm.js 终端渲染 | 完整 ANSI 颜色、进度条、diff 显示 | ✅ | ui-smoke |
-| U2 | 自适应终端尺寸 | fitAddon 自动调整 cols/rows，resize 通知 PTY | ⚠️ | — |
-| U3 | Worker 历史浏览 | GET /api/agents/:id/history 分页输出 | ✅ | T15 |
+| U2 | 自适应终端尺寸 | fitAddon 自动调整 cols/rows，resize 通知 PTY | ✅ | (内含于所有UI测试) |
+| U3 | Worker 历史浏览 | API ✅(T15)，前端：toolbar 加载更多按钮 | 🔲 前端 | T15 |
 
 ### 2.2 输入
 
 | # | 功能 | 说明 | 状态 | 测试 |
 |---|------|------|------|------|
-| U4 | 底部输入栏 | 独立 textarea，Enter 发送 | ✅ | mobile:textarea |
-| U5 | 手机键盘输入 | xterm 接收键盘输入 + 虚拟按键栏发送特殊键 | 🔲 | — |
-| U15 | 虚拟按键栏 | Enter/换行/Ctrl+C/↑↓←→/Tab/Esc 按钮，替代底部 textarea | 🔲 | — |
+| U5 | 手机键盘输入 | xterm 接收键盘，虚拟按键栏发送特殊键 | ✅ | mobile:keybar |
+| U15 | 虚拟按键栏 | 主栏(Enter/Esc/Tab/↑↓) + 折叠栏(^C/^Z/←→等) | ✅ | mobile:keybar |
 | U6 | UI 与网络解耦 | 消息队列缓冲，WS 断开不丢输入，重连自动 flush | ✅ | mobile:queue |
 
 ### 2.3 侧栏与导航
@@ -80,8 +79,8 @@
 
 | # | 功能 | 说明 | 状态 | 测试 |
 |---|------|------|------|------|
-| U13 | 浏览服务器文件 | GET /api/browse?path= 已有 | ✅ | T12 |
-| U14 | 阅读文件内容 | GET /api/readfile?path= (max 1MB) | ✅ | T16 |
+| U13 | 浏览服务器文件 | API ✅(T12)，前端：文件浏览面板 | 🔲 前端 | T12 |
+| U14 | 阅读文件内容 | API ✅(T16)，前端：文件查看面板 | 🔲 前端 | T16 |
 
 ---
 
@@ -166,5 +165,5 @@
 | # | 问题 | 原因 | 优先级 | 回归测试 |
 |---|------|------|--------|---------|
 | ~~BUG1~~ | ~~手机键盘输入失效 (U5)~~ | ~~已修复: disableStdin on mobile~~ | — | ✅ mobile:keyboard |
-| BUG2 | Master 无法感知 Hub 内 Agent (C1-C3) | PTY 纯管道，服务端不拦截语义 | 高 | 🔲 待加 |
+| ~~BUG2~~ | ~~Master 无法感知 Hub 内 Agent~~ | ~~已修复: /summaries /inject API~~ | — | ✅ T19-T21 |
 | ~~BUG3~~ | ~~网络卡顿时 UI 操作卡死 (U6)~~ | ~~已修复: sendQueue + flush~~ | — | ✅ mobile:queue |

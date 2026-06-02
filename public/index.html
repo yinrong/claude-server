@@ -27,6 +27,8 @@
       <button id="btn-sidebar-toggle" class="icon-btn" title="菜单">☰</button>
       <span id="agent-label">未选择 Agent</span>
       <span id="agent-type-badge" class="badge hidden"></span>
+      <button id="btn-chdir" class="icon-btn" title="切换工作目录">📂</button>
+      <button id="btn-files" class="icon-btn" title="文件浏览">🗂</button>
       <button id="btn-attach" class="icon-btn" title="附件">📎</button>
       <input id="file-input" type="file" accept="image/*,.pdf,.txt,.js,.ts,.py,.json,.md" multiple style="display:none" />
       <span id="conn-dot" class="status-dot disconnected"></span>
@@ -95,6 +97,32 @@
       <button id="modal-confirm" class="primary-btn">创建</button>
     </div>
   </div>
+</div>
+
+<!-- Change directory modal -->
+<div id="chdir-overlay" class="modal-backdrop hidden">
+  <div id="chdir-modal">
+    <h3>切换工作目录</h3>
+    <label>新目录<input id="chdir-path" type="text" value="/home" /></label>
+    <div id="chdir-browse-wrap"><ul id="chdir-browse-list"></ul></div>
+    <label>最近使用
+      <select id="chdir-recent"><option value="">（加载中）</option></select>
+    </label>
+    <div class="modal-actions">
+      <button id="chdir-cancel">取消</button>
+      <button id="chdir-confirm" class="primary-btn">切换并重启</button>
+    </div>
+  </div>
+</div>
+
+<!-- File browser panel (slide from right) -->
+<div id="file-panel" class="hidden">
+  <div id="file-panel-header">
+    <span id="file-panel-path">/</span>
+    <button id="file-panel-close">✕</button>
+  </div>
+  <div id="file-panel-list"></div>
+  <pre id="file-panel-content" class="hidden"></pre>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.min.js"></script>

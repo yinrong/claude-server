@@ -286,6 +286,138 @@ document.addEventListener('paste', async (e) => {
   }
 });
 
+// ── Change directory modal ────────────────────────────────────────────────────
+const chdirOverlay = $('chdir-overlay');
+$('btn-chdir').addEventListener('click', async () => {
+  if (!currentAgentId) return alert('请先选择 Agent');
+  chdirOverlay.classList.remove('hidden');
+  $('chdir-path').value = '/home';
+  loadChdirBrowse('/home');
+  // Load recent commands
+  try {
+    const cmds = await (await fetch('/api/recent-commands')).json();
+    const sel = $('chdir-recent');
+    sel.innerHTML = '<option value="">选择最近目录…</option>';
+    for (const c of cmds) {
+      const opt = document.createElement('option');
+      opt.value = c.cwd; opt.textContent = c.cwd;
+      sel.appendChild(opt);
+    }
+  } catch {}
+});
+$('chdir-cancel').addEventListener('click', () => chdirOverlay.classList.add('hidden'));
+$('chdir-recent').addEventListener('change', (e) => {
+  if (e.target.value) { $('chdir-path').value = e.target.value; loadChdirBrowse(e.target.value); }
+});
+$('chdir-confirm').addEventListener('click', async () => {
+  const cwd = $('chdir-path').value.trim();
+  if (!cwd || !currentAgentId) return;
+  await fetch(`/api/agents/${currentAgentId}/restart`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ cwd }),
+  });
+  chdirOverlay.classList.add('hidden');
+  term?.clear();
+});
+
+async function loadChdirBrowse(path) {
+  try {
+    const res = await fetch(`/api/browse?path=${encodeURIComponent(path)}`);
+    if (!res.ok) return;
+    const { entries } = await res.json();
+    const list = $('chdir-browse-list');
+    list.innerHTML = '';
+    if (path !== '/') {
+      const parent = path.split('/').slice(0, -1).join('/') || '/';
+      const li = document.createElement('li');
+      li.textContent = '📁 ..';
+      li.addEventListener('click', () => { $('chdir-path').value = parent; loadChdirBrowse(parent); });
+      list.appendChild(li);
+    }
+    for (const e of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+      const li = document.createElement('li');
+      li.textContent = `📁 ${e.name}`;
+      const full = path === '/' ? `/${e.name}` : `${path}/${e.name}`;
+      li.addEventListener('click', () => { $('chdir-path').value = full; loadChdirBrowse(full); });
+      list.appendChild(li);
+    }
+  } catch {}
+}
+
+// ── File browser panel ───────────────────────────────────────────────────────
+const filePanel = $('file-panel');
+const filePanelList = $('file-panel-list');
+const filePanelContent = $('file-panel-content');
+const filePanelPath = $('file-panel-path');
+let currentBrowsePath = '/';
+
+$('btn-files').addEventListener('click', () => {
+  filePanel.classList.toggle('hidden');
+  if (!filePanel.classList.contains('hidden')) loadFilePanel(currentBrowsePath);
+});
+$('file-panel-close').addEventListener('click', () => filePanel.classList.add('hidden'));
+
+async function loadFilePanel(path) {
+  currentBrowsePath = path;
+  filePanelPath.textContent = path;
+  filePanelContent.classList.add('hidden');
+  filePanelList.classList.remove('hidden');
+  filePanelList.innerHTML = '';
+
+  try {
+    const res = await fetch(`/api/browse?path=${encodeURIComponent(path)}`);
+    if (!res.ok) return;
+    const { entries } = await res.json();
+
+    // Parent
+    if (path !== '/') {
+      const parent = path.split('/').slice(0, -1).join('/') || '/';
+      const div = document.createElement('div');
+      div.className = 'fp-item dir';
+      div.textContent = '📁 ..';
+      div.addEventListener('click', () => loadFilePanel(parent));
+      filePanelList.appendChild(div);
+    }
+
+    // Also fetch files (not just dirs)
+    const fullRes = await fetch(`/api/browse?path=${encodeURIComponent(path)}&files=1`);
+    let allEntries = entries;
+    if (fullRes.ok) {
+      const full = await fullRes.json();
+      allEntries = full.entries ?? entries;
+    }
+
+    for (const e of allEntries.sort((a, b) => {
+      if (a.type === b.type) return a.name.localeCompare(b.name);
+      return a.type === 'dir' ? -1 : 1;
+    })) {
+      const div = document.createElement('div');
+      div.className = `fp-item ${e.type}`;
+      div.textContent = `${e.type === 'dir' ? '📁' : '📄'} ${e.name}`;
+      const full = path === '/' ? `/${e.name}` : `${path}/${e.name}`;
+      if (e.type === 'dir') {
+        div.addEventListener('click', () => loadFilePanel(full));
+      } else {
+        div.addEventListener('click', () => loadFileContent(full));
+      }
+      filePanelList.appendChild(div);
+    }
+  } catch {}
+}
+
+async function loadFileContent(path) {
+  filePanelPath.textContent = path;
+  filePanelList.classList.add('hidden');
+  filePanelContent.classList.remove('hidden');
+  filePanelContent.textContent = '加载中…';
+  try {
+    const res = await fetch(`/api/readfile?path=${encodeURIComponent(path)}`);
+    if (!res.ok) { filePanelContent.textContent = `错误: ${res.status}`; return; }
+    const { content } = await res.json();
+    filePanelContent.textContent = content;
+  } catch (e) { filePanelContent.textContent = `错误: ${e.message}`; }
+}
+
 // ── Init ──────────────────────────────────────────────────────────────────────
 initTerminal();
 loadAgents().then(agents => {

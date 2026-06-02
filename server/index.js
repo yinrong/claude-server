@@ -32,9 +32,10 @@ app.get('/api/memory', (_req, res) => { res.json(getAllMemory()); });
 // Recent commands (cwd history for quick-select)
 app.get('/api/recent-commands', (_req, res) => { res.json(getRecentCommands()); });
 
-// Browse server directories (for the "new agent" modal directory picker)
+// Browse server directories (and optionally files)
 app.get('/api/browse', (req, res) => {
   const targetPath = req.query.path || '/';
+  const showFiles = req.query.files === '1';
   try {
     const items = readdirSync(targetPath);
     const entries = items.slice(0, 200).map(name => {
@@ -43,7 +44,7 @@ app.get('/api/browse', (req, res) => {
         const st = statSync(full);
         return { name, type: st.isDirectory() ? 'dir' : 'file' };
       } catch { return { name, type: 'unknown' }; }
-    }).filter(e => e.type === 'dir'); // Only show directories for cwd selection
+    }).filter(e => showFiles ? (e.type === 'dir' || e.type === 'file') : e.type === 'dir');
     res.json({ path: targetPath, entries });
   } catch (err) {
     res.status(400).json({ error: err.message });

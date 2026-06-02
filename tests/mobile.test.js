@@ -70,8 +70,10 @@ test('mobile: virtual Ctrl+C button sends interrupt', async ({ page }) => {
   await page.click('#agent-list li');
   await sleep(500);
 
-  // Click Ctrl+C virtual key
-  await page.click('#keybar button[data-key="ctrl-c"]');
+  // Expand extras, then click Ctrl+C
+  await page.click('#keybar-more');
+  await sleep(200);
+  await page.click('#keybar-extra button[data-key="ctrl-c"]');
   await sleep(200);
 
   // Should not crash
