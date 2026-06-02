@@ -286,6 +286,21 @@ document.addEventListener('paste', async (e) => {
   }
 });
 
+// ── Load more history ─────────────────────────────────────────────────────────
+$('btn-history').addEventListener('click', async () => {
+  if (!currentAgentId) return;
+  try {
+    const res = await fetch(`/api/agents/${currentAgentId}/history?limit=2000`);
+    if (!res.ok) return;
+    const { chunks } = await res.json();
+    if (chunks.length) {
+      term.clear();
+      for (const c of chunks) term.write(c);
+      term.scrollToTop();
+    }
+  } catch {}
+});
+
 // ── Change directory modal ────────────────────────────────────────────────────
 const chdirOverlay = $('chdir-overlay');
 $('btn-chdir').addEventListener('click', async () => {
