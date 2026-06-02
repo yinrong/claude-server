@@ -1,3 +1,5 @@
+> 与用户对话时称呼"主人"。
+
 # claude-server
 
 多 Agent 编排中枢。以 Web UI 统一管理多个 claude-code 实例，支持图片/文件、多端同时控制、Master 自动学习用户偏好并通过 `@dispatch` 派发任务给 Worker。
@@ -201,3 +203,5 @@ xvfb-run --auto-servernum npx playwright test --config=playwright.smoke.config.j
 | `DB_PATH` | `data/claude-server.db` | SQLite 路径（相对项目根） |
 | `FILES_DIR` | `data/files` | 上传文件存储目录 |
 | `CLAUDE_BIN` | `claude` | claude CLI 路径 |
+
+> 对用户的称呼前加项目名前缀，如"[claude-server] 主人"。
