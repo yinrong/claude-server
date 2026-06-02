@@ -17,7 +17,7 @@ import { test, expect } from '@playwright/test';
 import { mkdirSync, writeFileSync } from 'fs';
 import { join } from 'path';
 
-const BASE = 'http://localhost:4280';
+const BASE = process.env.BASE_URL ?? `http://localhost:${process.env.PORT ?? 37891}`;
 const SHOT_DIR = join(process.cwd(), 'test-results', 'screenshots');
 mkdirSync(SHOT_DIR, { recursive: true });
 

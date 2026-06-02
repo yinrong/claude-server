@@ -114,6 +114,7 @@ claude 自己管理对话历史和 session 持久化，服务端只负责 PTY I/
 | prod | 4280 | data/prod.db | claude-server-prod |
 | dev | 4281 | data/dev.db | claude-server-dev |
 | test | 37890 | data/test.db | (Playwright 自动启停) |
+| smoke | 37891 | data/smoke-test.db | (Playwright 自动启停) |
 
 更新代码后只执行：`pm2 restart claude-server-dev`
 
@@ -183,7 +184,7 @@ output_buffer (id AUTO, agent_id, data TEXT, ts)  -- PTY 原始输出缓存，�
 # 单元/集成 E2E（14 个测试，用 mock adapter，不调用真实 claude）
 PORT=37890 npx playwright test
 
-# UI 浏览器交互测试（2 个测试，调用真实 claude，需要 PM2 在 4280 运行）
+# UI 浏览器交互测试（2 个测试，调用真实 claude，独立端口 37891）
 xvfb-run --auto-servernum npx playwright test --config=playwright.smoke.config.js
 ```
 

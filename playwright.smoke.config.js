@@ -1,14 +1,21 @@
 import { defineConfig } from '@playwright/test';
 
+const PORT = 37891;
+
 export default defineConfig({
   testDir: './tests',
   testMatch: '**/ui-smoke.test.js',
   timeout: 300000,
   use: {
-    baseURL: 'http://localhost:4280',
-    headless: false,              // 显示浏览器窗口
+    baseURL: `http://localhost:${PORT}`,
+    headless: true,
     viewport: { width: 1280, height: 800 },
     video: 'retain-on-failure',
   },
-  // Server already running via PM2, don't start/stop it
+  webServer: {
+    command: `PORT=${PORT} DB_PATH=./data/smoke-test.db node server/index.js`,
+    url: `http://localhost:${PORT}`,
+    reuseExistingServer: false,
+    timeout: 25000,
+  },
 });
