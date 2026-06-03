@@ -1,0 +1,197 @@
+import { spawn } from 'child_process';
+import { EventEmitter } from 'events';
+
+/**
+ * ClaudeCodeStreamAdapter — stream-json API mode.
+ *
+ * Uses `claude --print --input-format stream-json --output-format stream-json`
+ * per turn. Each user message spawns a new process with full conversation
+ * history in stdin. Claude handles tools internally.
+ *
+ * Events:
+ *   'text'    (string)           — streaming text chunk
+ *   'tool'    ({name, input})    — tool call started
+ *   'result'  ({text, usage})    — turn complete
+ *   'error'   (string)           — error occurred
+ *
+ * No PTY, no xterm dependency. All rendering done by custom UI.
+ */
+export class ClaudeCodeStreamAdapter extends EventEmitter {
+  constructor(config = {}) {
+    super();
+    this.config = config;
+    this._proc = null;
+    this._history = []; // [{role: 'user'|'assistant', content: [...]}]
+    this._alive = true;
+  }
+
+  get type() { return 'claude-code-stream'; }
+  get alive() { return this._alive; }
+  get history() { return this._history; }
+
+  async sendMessage(content) {
+    if (this._proc) return; // don't allow concurrent sends
+
+    const { cwd = process.cwd(), systemPrompt } = this.config;
+    const claudeBin = process.env.CLAUDE_BIN ?? 'claude';
+
+    const args = [
+      '--print',
+      '--input-format', 'stream-json',
+      '--output-format', 'stream-json',
+      '--verbose',
+      '--dangerously-skip-permissions',
+      '--no-session-persistence',
+      '--include-partial-messages',
+    ];
+    if (systemPrompt) args.push('--append-system-prompt', systemPrompt);
+
+    const proc = spawn(claudeBin, args, {
+      cwd,
+      stdio: ['pipe', 'pipe', 'pipe'],
+      env: { ...process.env },
+    });
+    this._proc = proc;
+
+    // Write full conversation history + new message to stdin
+    for (const msg of this._history) {
+      proc.stdin.write(JSON.stringify({
+        type: msg.role,
+        message: { role: msg.role, content: msg.content },
+      }) + '\n');
+    }
+    proc.stdin.write(JSON.stringify({
+      type: 'user',
+      message: { role: 'user', content },
+    }) + '\n');
+    proc.stdin.end();
+
+    // Save user message to history
+    this._history.push({ role: 'user', content });
+
+    // Parse stdout
+    let buffer = '';
+    let fullText = '';
+    const toolCalls = [];
+
+    proc.stdout.on('data', (chunk) => {
+      buffer += chunk.toString();
+      const lines = buffer.split('\n');
+      buffer = lines.pop();
+
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        try {
+          const evt = JSON.parse(line);
+          this._handleEvent(evt, { fullText: () => fullText, setFullText: (t) => { fullText = t; }, toolCalls });
+        } catch {}
+      }
+    });
+
+    proc.stderr.on('data', () => {});
+
+    return new Promise((resolve) => {
+      proc.on('close', () => {
+        // Process remaining buffer
+        if (buffer.trim()) {
+          try {
+            const evt = JSON.parse(buffer);
+            this._handleEvent(evt, { fullText: () => fullText, setFullText: (t) => { fullText = t; }, toolCalls });
+          } catch {}
+        }
+
+        // Save assistant response to history
+        const assistantContent = [];
+        if (fullText) assistantContent.push({ type: 'text', text: fullText });
+        for (const t of toolCalls) {
+          assistantContent.push({ type: 'tool_use', name: t.name, input: t.input });
+        }
+        if (assistantContent.length) {
+          this._history.push({ role: 'assistant', content: assistantContent });
+        }
+
+        this._proc = null;
+        resolve({ text: fullText, toolCalls });
+      });
+    });
+  }
+
+  _handleEvent(evt, ctx) {
+    if (evt.type === 'stream_event') {
+      const e = evt.event;
+      if (e?.type === 'content_block_delta' && e.delta?.type === 'text_delta') {
+        ctx.setFullText(ctx.fullText() + e.delta.text);
+        this.emit('text', e.delta.text);
+      } else if (e?.type === 'content_block_start' && e.content_block?.type === 'tool_use') {
+        this.emit('tool_start', { name: e.content_block.name, id: e.content_block.id });
+      }
+    } else if (evt.type === 'assistant' && evt.message?.content) {
+      for (const block of evt.message.content) {
+        if (block.type === 'tool_use') {
+          ctx.toolCalls.push({ name: block.name, input: block.input, id: block.id });
+          this.emit('tool', { name: block.name, input: block.input, id: block.id });
+        }
+      }
+    } else if (evt.type === 'result') {
+      const text = ctx.fullText() || evt.result || '';
+      ctx.setFullText(text);
+      this.emit('result', {
+        text,
+        isError: evt.is_error,
+        usage: evt.usage,
+        duration: evt.duration_ms,
+      });
+    }
+  }
+
+  // Compact: summarize history when too long
+  async compact() {
+    if (this._history.length < 4) return;
+    const claudeBin = process.env.CLAUDE_BIN ?? 'claude';
+    const historyText = this._history.map(m => {
+      const text = m.content.filter(c => c.type === 'text').map(c => c.text).join('\n');
+      return `[${m.role}]: ${text}`;
+    }).join('\n\n');
+
+    const prompt = `请将以下对话压缩为一段简洁的摘要（保留关键事实、决策和上下文），用中文：\n\n${historyText.slice(0, 8000)}`;
+
+    return new Promise((resolve) => {
+      const proc = spawn(claudeBin, ['--print', '-p', prompt, '--no-session-persistence', '--dangerously-skip-permissions'], {
+        cwd: this.config.cwd || process.cwd(),
+        stdio: ['ignore', 'pipe', 'ignore'],
+      });
+      let output = '';
+      proc.stdout.on('data', d => { output += d.toString(); });
+      proc.on('close', () => {
+        if (output.trim()) {
+          this._history = [{
+            role: 'user',
+            content: [{ type: 'text', text: `[对话历史摘要]\n${output.trim()}` }],
+          }, {
+            role: 'assistant',
+            content: [{ type: 'text', text: '好的，我已了解之前的对话上下文。请继续。' }],
+          }];
+          this.emit('compacted', output.trim());
+        }
+        resolve();
+      });
+    });
+  }
+
+  clearHistory() {
+    this._history = [];
+    this.emit('cleared');
+  }
+
+  stop() {
+    if (this._proc) { this._proc.kill('SIGTERM'); this._proc = null; }
+    this._alive = false;
+  }
+
+  restart(newConfig) {
+    this.stop();
+    if (newConfig) Object.assign(this.config, newConfig);
+    this._history = [];
+    this._alive = true;
+  }
+}

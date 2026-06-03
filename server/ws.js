@@ -24,10 +24,27 @@ export function handleWS(ws, req) {
         agentManager.resize(agentId, msg.cols, msg.rows);
         break;
       case 'msg':
-        // Structured message (text + files) — extracted and written to PTY
         if (msg.content) {
           agentManager.sendMessage(msg.agentId ?? agentId, msg.content);
         }
+        break;
+      case 'chat':
+        // Stream adapter: send structured chat message
+        if (msg.text) {
+          agentManager.sendChat(msg.agentId ?? agentId, msg.text)
+            .catch(err => ws.send(JSON.stringify({ type: 'error', error: err.message })));
+        }
+        break;
+      case 'compact':
+        agentManager.compactHistory(msg.agentId ?? agentId)
+          .catch(err => ws.send(JSON.stringify({ type: 'error', error: err.message })));
+        break;
+      case 'get_history':
+        // Return chat history for stream adapter
+        ws.send(JSON.stringify({
+          type: 'chat_history',
+          history: agentManager.getChatHistory(msg.agentId ?? agentId),
+        }));
         break;
       case 'sub': {
         const newId = msg.agentId;

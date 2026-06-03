@@ -9,6 +9,7 @@ import {
 } from '../store/db.js';
 import { MockAdapter } from './adapter/mock.js';
 import { ClaudeCodeAdapter } from './adapter/claude-code.js';
+import { ClaudeCodeStreamAdapter } from './adapter/claude-code-stream.js';
 
 class AgentManager extends EventEmitter {
   constructor() {
@@ -111,6 +112,45 @@ class AgentManager extends EventEmitter {
     }
   }
 
+  // Send structured chat message (for stream adapter)
+  async sendChat(agentId, text) {
+    const session = this._sessions.get(agentId);
+    if (!session) throw new Error(`Agent ${agentId} not found`);
+
+    const adapter = session.adapter;
+    if (adapter.type !== 'claude-code-stream') {
+      // Fallback: write to PTY
+      this.writeRaw(agentId, text + '\n');
+      return;
+    }
+
+    const content = [{ type: 'text', text }];
+    // Broadcast user message
+    this._broadcast(agentId, { type: 'user_msg', text });
+
+    // Stream adapter sends and streams back
+    await adapter.sendMessage(content);
+  }
+
+  // Compact history for stream adapter
+  async compactHistory(agentId) {
+    const session = this._sessions.get(agentId);
+    if (!session) return;
+    if (session.adapter.type === 'claude-code-stream') {
+      await session.adapter.compact();
+    }
+  }
+
+  // Get chat history for stream adapter
+  getChatHistory(agentId) {
+    const session = this._sessions.get(agentId);
+    if (!session) return [];
+    if (session.adapter.type === 'claude-code-stream') {
+      return session.adapter.history;
+    }
+    return [];
+  }
+
   // Write raw string directly to PTY (for keyboard input from xterm)
   writeRaw(agentId, data) {
     const session = this._sessions.get(agentId);
@@ -177,32 +217,58 @@ Excerpt: ${text.slice(-1500)}`;
     let idleTimer = null;
     let outputBuffer = '';
 
+    // PTY adapter events
     adapter.on('data', (data) => {
       appendOutput(agentId, data);
       this._broadcast(agentId, { type: 'output', data });
 
-      // Idle detection
       if (session) {
         session.waitingForInput = false;
         clearTimeout(idleTimer);
         idleTimer = setTimeout(() => {
           session.waitingForInput = true;
           this._broadcast(agentId, { type: 'status', agentId, waitingForInput: true });
-
-          // @dispatch detection: when agent goes idle, scan recent output for dispatch commands
           this._checkDispatch(agentId, outputBuffer);
           outputBuffer = '';
         }, 2000);
       }
 
-      // Accumulate output for dispatch scanning (keep last 4KB)
       outputBuffer += data;
       if (outputBuffer.length > 4096) outputBuffer = outputBuffer.slice(-4096);
     });
+
     adapter.on('exit', (code) => {
       if (session) session.waitingForInput = false;
       setAgentStatus(agentId, 'stopped');
       this._broadcast(agentId, { type: 'exit', code });
+    });
+
+    // Stream adapter events
+    adapter.on('text', (text) => {
+      this._broadcast(agentId, { type: 'stream_text', text });
+      if (session) session.waitingForInput = false;
+    });
+
+    adapter.on('tool_start', (tool) => {
+      this._broadcast(agentId, { type: 'tool_start', name: tool.name, id: tool.id });
+    });
+
+    adapter.on('tool', (tool) => {
+      this._broadcast(agentId, { type: 'tool_done', name: tool.name, input: tool.input, id: tool.id });
+    });
+
+    adapter.on('result', (result) => {
+      this._broadcast(agentId, { type: 'assistant_done', text: result.text, usage: result.usage });
+      if (session) {
+        session.waitingForInput = true;
+        this._broadcast(agentId, { type: 'status', agentId, waitingForInput: true });
+      }
+      // Check @dispatch
+      if (result.text) this._checkDispatch(agentId, result.text);
+    });
+
+    adapter.on('compacted', (summary) => {
+      this._broadcast(agentId, { type: 'compacted', summary });
     });
   }
 
@@ -233,6 +299,7 @@ Excerpt: ${text.slice(-1500)}`;
   _makeAdapter(adapterType, config) {
     switch (adapterType) {
       case 'claude-code': return new ClaudeCodeAdapter(config);
+      case 'claude-code-stream': return new ClaudeCodeStreamAdapter(config);
       case 'mock': return new MockAdapter(config);
       default: throw new Error(`Unknown adapter type: ${adapterType}`);
     }

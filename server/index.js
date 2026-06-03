@@ -65,6 +65,9 @@ app.get('/api/readfile', (req, res) => {
   }
 });
 
+// Chat UI route (方案A)
+app.get('/chat', (_req, res) => res.sendFile('chat.html', { root: join(__dirname, '..', 'public') }));
+
 // Health
 app.get('/health', (_req, res) => res.json({ ok: true }));
 

@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Claude Hub - Chat</title>
+  <link rel="stylesheet" href="chat.css" />
+</head>
+<body>
+<div id="app">
+
+  <!-- Sidebar -->
+  <aside id="sidebar">
+    <div id="sidebar-header">
+      <span class="logo">⚡ Claude Hub</span>
+      <button id="btn-new-agent" title="新建">＋</button>
+    </div>
+    <ul id="agent-list"></ul>
+  </aside>
+
+  <!-- Main -->
+  <main id="main">
+    <div id="toolbar">
+      <button id="btn-menu" class="tb-btn">☰</button>
+      <span id="agent-label">未选择</span>
+      <span id="status-badge"></span>
+      <button id="btn-compact" class="tb-btn" title="压缩历史">📦</button>
+      <button id="btn-files" class="tb-btn" title="文件">🗂</button>
+      <span id="conn-dot" class="dot off"></span>
+    </div>
+
+    <!-- Chat messages -->
+    <div id="chat">
+      <div id="chat-messages"></div>
+      <div id="streaming-indicator" class="hidden">
+        <span class="typing-dot"></span> 思考中…
+      </div>
+    </div>
+
+    <!-- Input area -->
+    <div id="input-area">
+      <div id="quick-keys">
+        <button data-key="tab">Tab</button>
+        <button data-key="esc">Esc</button>
+        <button data-key="up">↑</button>
+        <button data-key="down">↓</button>
+      </div>
+      <div id="input-row">
+        <textarea id="input" rows="1" placeholder="输入消息…"></textarea>
+        <button id="btn-send">↑</button>
+      </div>
+    </div>
+  </main>
+
+</div>
+
+<!-- New agent modal -->
+<div id="modal-bg" class="hidden">
+  <div id="modal">
+    <h3>新建 Agent</h3>
+    <label>名称<input id="m-name" type="text" /></label>
+    <label>类型
+      <select id="m-type"><option value="worker">Worker</option><option value="master">Master</option></select>
+    </label>
+    <label>工作目录<input id="m-cwd" type="text" value="/home" /></label>
+    <div class="modal-btns">
+      <button id="m-cancel">取消</button>
+      <button id="m-ok" class="primary">创建</button>
+    </div>
+  </div>
+</div>
+
+<script src="chat.js"></script>
+</body>
+</html>
