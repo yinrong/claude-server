@@ -6,12 +6,7 @@
 
 ## 快速启动
 
-```bash
-pm2 start ecosystem.config.cjs   # 启动服务（PORT=4280）
-pm2 logs claude-server            # 查看日志
-```
-
-打开 http://localhost:4280，点 **＋** 创建第一个 Agent。
+见 [README.md](./README.md)。
 
 ## 架构
 
@@ -79,6 +74,10 @@ Browser ↔ WebSocket ↔ 中间层(Server) ↔ Adapter ↔ claude-code / 其他
 - Master 能查询所有 Worker 的工作目标和当前状态
 - Master 能代替用户向 Worker 下达指令和反馈
 - Master 能监督 Worker 不间断运行直到完成目标
+
+### 开发流程
+
+严格遵守 DDD + TDD（见全局记忆）：FEATURES.md → 测试(FAIL) → 实现(PASS) → 提交。
 
 ### 用户对功能的根本要求
 
