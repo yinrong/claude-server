@@ -35,16 +35,26 @@ export class ClaudeCodeStreamAdapter extends EventEmitter {
     const { cwd = process.cwd(), systemPrompt } = this.config;
     const claudeBin = process.env.CLAUDE_BIN ?? 'claude';
 
+    // Encode history in --append-system-prompt (NOT stdin) to avoid
+    // the multi-response bug where claude responds to each user message in stdin
+    let historyPrompt = systemPrompt ?? '';
+    if (this._history.length > 0) {
+      const turns = this._history.map(m => {
+        const text = m.content.filter(c => c.type === 'text').map(c => c.text).join('\n');
+        return `<turn><role>${m.role}</role><content>${text}</content></turn>`;
+      }).join('\n');
+      historyPrompt += `\n\n<conversation_history>\n${turns}\n</conversation_history>`;
+    }
+
     const args = [
       '--print',
-      '--input-format', 'stream-json',
       '--output-format', 'stream-json',
       '--verbose',
       '--dangerously-skip-permissions',
       '--no-session-persistence',
       '--include-partial-messages',
     ];
-    if (systemPrompt) args.push('--append-system-prompt', systemPrompt);
+    if (historyPrompt.trim()) args.push('--append-system-prompt', historyPrompt);
 
     const proc = spawn(claudeBin, args, {
       cwd,
@@ -53,17 +63,9 @@ export class ClaudeCodeStreamAdapter extends EventEmitter {
     });
     this._proc = proc;
 
-    // Write full conversation history + new message to stdin
-    for (const msg of this._history) {
-      proc.stdin.write(JSON.stringify({
-        type: msg.role,
-        message: { role: msg.role, content: msg.content },
-      }) + '\n');
-    }
-    proc.stdin.write(JSON.stringify({
-      type: 'user',
-      message: { role: 'user', content },
-    }) + '\n');
+    // Only send the NEW user message via stdin (plain text, not stream-json)
+    const newText = content.filter(c => c.type === 'text').map(c => c.text).join('\n');
+    proc.stdin.write(newText);
     proc.stdin.end();
 
     // Save user message to history

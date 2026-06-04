@@ -180,11 +180,12 @@ function updateStatus(msg) {
 function send() {
   const text = input.value.trim();
   if (!text || isStreaming || !currentAgentId) return;
-  appendMsg('user', text);
+  // Don't append user msg here — server will broadcast user_msg back
   queueSend({ type: 'chat', agentId: currentAgentId, text });
   input.value = '';
   input.style.height = 'auto';
   setStreaming(true);
+  scrollBottom();
 }
 
 btnSend.addEventListener('click', send);
