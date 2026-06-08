@@ -172,3 +172,4 @@
 | ~~BUG1~~ | ~~手机键盘输入失效 (U5)~~ | ~~已修复: disableStdin on mobile~~ | — | ✅ mobile:keyboard |
 | ~~BUG2~~ | ~~Master 无法感知 Hub 内 Agent~~ | ~~已修复: /summaries /inject API~~ | — | ✅ T19-T21 |
 | ~~BUG3~~ | ~~网络卡顿时 UI 操作卡死 (U6)~~ | ~~已修复: sendQueue + flush~~ | — | ✅ mobile:queue |
+| ~~BUG4~~ | ~~切换 Agent 后对话历史丢失~~ | ~~已修复: _handleEvent 里提前存 history~~ | — | ✅ chat-smoke:BUG4 |

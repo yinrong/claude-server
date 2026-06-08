@@ -59,6 +59,7 @@ let streamText = '';
 function handleMsg(msg) {
   switch (msg.type) {
     case 'chat_history':
+      console.log('[chat] received chat_history, turns:', msg.history?.length);
       renderHistory(msg.history ?? []);
       break;
     case 'history':
@@ -97,8 +98,10 @@ function handleMsg(msg) {
 
 function renderHistory(history) {
   chatMsgs.innerHTML = '';
+  console.log('[chat] renderHistory called with', history.length, 'turns');
   for (const msg of history) {
     const text = msg.content?.filter(c => c.type === 'text').map(c => c.text).join('\n') ?? '';
+    console.log(`[chat]   render: role=${msg.role} text="${text.slice(0, 30)}"`);
     if (text) appendMsg(msg.role, text);
     const tools = msg.content?.filter(c => c.type === 'tool_use') ?? [];
     for (const t of tools) appendTool(`✓ ${t.name}`);

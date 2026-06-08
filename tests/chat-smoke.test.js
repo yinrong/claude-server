@@ -116,6 +116,54 @@ test.describe('Chat UI Smoke', () => {
     console.log(`✅ 多轮上下文保持`);
   });
 
+  test('BUG4回归: 切换Agent后历史不丢失', async ({ page }) => {
+    // Use WS-level test to avoid UI complexity
+    const id1 = await createStreamAgent('AgentA');
+    const id2 = await createStreamAgent('AgentB');
+
+    // Verify via direct WS that history persists after disconnect+reconnect
+    const result = await page.evaluate(async ([base, agentId]) => {
+      // Connect and send message
+      const ws1 = new WebSocket(`${base.replace('http', 'ws')}/ws?agentId=${agentId}`);
+      await new Promise(r => { ws1.onopen = r; });
+      await new Promise(r => setTimeout(r, 500));
+      ws1.send(JSON.stringify({ type: 'chat', agentId, text: 'MARKER_BUG4' }));
+
+      // Wait for assistant_done
+      await new Promise(resolve => {
+        ws1.onmessage = (e) => {
+          const m = JSON.parse(e.data);
+          if (m.type === 'assistant_done') resolve();
+        };
+      });
+      await new Promise(r => setTimeout(r, 1000));
+      ws1.close();
+      await new Promise(r => setTimeout(r, 500));
+
+      // Reconnect (simulating switch back)
+      const ws2 = new WebSocket(`${base.replace('http', 'ws')}/ws?agentId=${agentId}`);
+      await new Promise(r => { ws2.onopen = r; });
+      ws2.send(JSON.stringify({ type: 'get_history', agentId }));
+
+      const history = await new Promise(resolve => {
+        ws2.onmessage = (e) => {
+          const m = JSON.parse(e.data);
+          if (m.type === 'chat_history') resolve(m.history);
+        };
+        setTimeout(() => resolve([]), 5000);
+      });
+      ws2.close();
+      return history;
+    }, [BASE, id1]);
+
+    expect(result.length).toBeGreaterThanOrEqual(2);
+    const userMsg = result.find(m => m.role === 'user');
+    expect(userMsg.content[0].text).toBe('MARKER_BUG4');
+    const assistantMsg = result.find(m => m.role === 'assistant');
+    expect(assistantMsg).toBeDefined();
+    console.log('✅ BUG4: 切换后历史保持');
+  });
+
   test('网络断开: 输入不卡死', async ({ page }) => {
     await createStreamAgent('Offline');
     await setupChat(page);

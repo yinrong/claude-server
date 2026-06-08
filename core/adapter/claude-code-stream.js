@@ -85,35 +85,47 @@ export class ClaudeCodeStreamAdapter extends EventEmitter {
         if (!line.trim()) continue;
         try {
           const evt = JSON.parse(line);
-          this._handleEvent(evt, { fullText: () => fullText, setFullText: (t) => { fullText = t; }, toolCalls });
+          this._handleEvent(evt, { fullText: () => fullText, setFullText: (t) => { fullText = t; }, toolCalls, setResultText: (t) => { resultText = t; } });
         } catch {}
       }
     });
 
     proc.stderr.on('data', () => {});
 
+    let resultText = '';
+
     return new Promise((resolve) => {
       proc.on('close', () => {
-        // Process remaining buffer
+        // Process ALL remaining lines in buffer
         if (buffer.trim()) {
-          try {
-            const evt = JSON.parse(buffer);
-            this._handleEvent(evt, { fullText: () => fullText, setFullText: (t) => { fullText = t; }, toolCalls });
-          } catch {}
+          for (const line of buffer.split('\n')) {
+            if (!line.trim()) continue;
+            try {
+              const evt = JSON.parse(line);
+              this._handleEvent(evt, {
+                fullText: () => fullText,
+                setFullText: (t) => { fullText = t; },
+                toolCalls,
+                setResultText: (t) => { resultText = t; },
+              });
+            } catch {}
+          }
         }
 
-        // Save assistant response to history
-        const assistantContent = [];
-        if (fullText) assistantContent.push({ type: 'text', text: fullText });
-        for (const t of toolCalls) {
-          assistantContent.push({ type: 'tool_use', name: t.name, input: t.input });
-        }
-        if (assistantContent.length) {
+        const finalText = fullText || resultText;
+
+        // Only save if not already saved in _handleEvent (race condition fix)
+        if (!this._historySavedForCurrentTurn && finalText) {
+          const assistantContent = [{ type: 'text', text: finalText }];
+          for (const t of toolCalls) {
+            assistantContent.push({ type: 'tool_use', name: t.name, input: t.input });
+          }
           this._history.push({ role: 'assistant', content: assistantContent });
         }
+        this._historySavedForCurrentTurn = false;
 
         this._proc = null;
-        resolve({ text: fullText, toolCalls });
+        resolve({ text: finalText, toolCalls });
       });
     });
   }
@@ -137,6 +149,19 @@ export class ClaudeCodeStreamAdapter extends EventEmitter {
     } else if (evt.type === 'result') {
       const text = ctx.fullText() || evt.result || '';
       ctx.setFullText(text);
+      if (ctx.setResultText) ctx.setResultText(evt.result || text);
+
+      // Save assistant to history IMMEDIATELY (before proc.close, before emit)
+      // so it's available if client reconnects right after receiving 'result'
+      if (text && !evt.is_error) {
+        const assistantContent = [{ type: 'text', text }];
+        for (const t of ctx.toolCalls) {
+          assistantContent.push({ type: 'tool_use', name: t.name, input: t.input });
+        }
+        this._history.push({ role: 'assistant', content: assistantContent });
+        this._historySavedForCurrentTurn = true;
+      }
+
       this.emit('result', {
         text,
         isError: evt.is_error,
