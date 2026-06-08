@@ -473,3 +473,22 @@ test('T18: GET /api/recent-commands returns history of cwd/commands', async () =
   expect(cwds).toContain('/home');
   expect(cwds).toContain('/var');
 });
+
+// ── T25: Auto-create directory on agent creation (C12) ────────────────────
+test('T25: creating agent with non-existent cwd auto-creates the directory', async () => {
+  const testDir = `/tmp/claude-test-mkdir-${Date.now()}`;
+  // Ensure dir does not exist
+  expect(fs.existsSync(testDir)).toBe(false);
+
+  const res = await fetch(`${BASE}/api/agents`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: 'MkdirTest', type: 'worker', adapterType: 'mock', config: { cwd: testDir } }),
+  });
+  expect(res.status).toBe(201);
+
+  // Directory should now exist
+  expect(fs.existsSync(testDir)).toBe(true);
+
+  // Cleanup
+  fs.rmdirSync(testDir);
+});

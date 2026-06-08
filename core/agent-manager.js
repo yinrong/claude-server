@@ -1,5 +1,6 @@
 import { EventEmitter } from 'events';
 import { spawn as spawnChild } from 'child_process';
+import { mkdirSync } from 'fs';
 import {
   saveAgent, getAgent, getAllAgents, setAgentStatus, setAgentConfig, deleteAgentFromDB,
   saveMessage, getMessages,
@@ -22,6 +23,7 @@ class AgentManager extends EventEmitter {
 
   createAgent({ name, type = 'worker', adapterType = 'claude-code', config = {} }) {
     const finalConfig = { cwd: process.cwd(), ...config };
+    mkdirSync(finalConfig.cwd, { recursive: true });
     const id = saveAgent({ name, type, adapterType, config: finalConfig });
     const adapter = this._makeAdapter(adapterType, finalConfig);
     const session = { config: getAgent(id), adapter, subscribers: new Set() };
