@@ -173,3 +173,4 @@
 | ~~BUG2~~ | ~~Master 无法感知 Hub 内 Agent~~ | ~~已修复: /summaries /inject API~~ | — | ✅ T19-T21 |
 | ~~BUG3~~ | ~~网络卡顿时 UI 操作卡死 (U6)~~ | ~~已修复: sendQueue + flush~~ | — | ✅ mobile:queue |
 | ~~BUG4~~ | ~~切换 Agent 后对话历史丢失~~ | ~~已修复: _handleEvent 里提前存 history~~ | — | ✅ chat-smoke:BUG4 |
+| ~~BUG5~~ | ~~E2E 测试全用 mock 未检测到 claude binary 损坏~~ | ~~已修复: T26 调用真实 claude~~ | — | ✅ T26 |

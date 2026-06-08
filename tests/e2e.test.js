@@ -474,6 +474,30 @@ test('T18: GET /api/recent-commands returns history of cwd/commands', async () =
   expect(cwds).toContain('/var');
 });
 
+// ── T26: Real claude binary works (BUG5 regression) ──────────────────────
+test('T26: real claude-code-stream agent responds to a message', async () => {
+  const agentId = await createAgent({ name: 'RealClaude', adapterType: 'claude-code-stream', config: { cwd: '/tmp' } });
+
+  const ws = await wsConnect(agentId);
+  await nextMsg(ws, 5000); // history
+
+  // Send a trivial message via chat protocol
+  ws.send(JSON.stringify({ type: 'chat', agentId, text: 'say OK' }));
+
+  // Wait for assistant_done
+  const done = await new Promise((resolve) => {
+    const timeout = setTimeout(() => resolve(null), 30000);
+    ws.on('message', d => {
+      const m = JSON.parse(d.toString());
+      if (m.type === 'assistant_done') { clearTimeout(timeout); resolve(m); }
+    });
+  });
+
+  expect(done).not.toBeNull();
+  expect(done.text.length).toBeGreaterThan(0);
+  ws.close();
+});
+
 // ── T25: Auto-create directory on agent creation (C12) ────────────────────
 test('T25: creating agent with non-existent cwd auto-creates the directory', async () => {
   const testDir = `/tmp/claude-test-mkdir-${Date.now()}`;
