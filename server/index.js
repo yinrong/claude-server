@@ -51,6 +51,20 @@ app.get('/api/browse', (req, res) => {
   }
 });
 
+// Download file (for file browser — actual file download)
+app.get('/api/download', (req, res) => {
+  const filePath = req.query.path;
+  if (!filePath) return res.status(400).json({ error: 'path required' });
+  try {
+    statSync(filePath);
+    const filename = filePath.split('/').pop();
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"`);
+    res.sendFile(filePath);
+  } catch (err) {
+    res.status(404).json({ error: err.message });
+  }
+});
+
 // Read file content (for file browser UI)
 app.get('/api/readfile', (req, res) => {
   const filePath = req.query.path;

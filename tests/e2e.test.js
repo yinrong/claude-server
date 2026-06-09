@@ -474,6 +474,15 @@ test('T18: GET /api/recent-commands returns history of cwd/commands', async () =
   expect(cwds).toContain('/var');
 });
 
+// ── T27: Download file API (U20) ──────────────────────────────────────────
+test('T27: GET /api/download?path= returns file with Content-Disposition', async ({ request }) => {
+  const res = await request.get('/api/download?path=/etc/hostname');
+  expect(res.status()).toBe(200);
+  expect(res.headers()['content-disposition']).toContain('attachment');
+  const body = await res.body();
+  expect(body.length).toBeGreaterThan(0);
+});
+
 // ── T26: Real claude binary works (BUG5 regression) ──────────────────────
 test('T26: real claude-code-stream agent responds to a message', async () => {
   const agentId = await createAgent({ name: 'RealClaude', adapterType: 'claude-code-stream', config: { cwd: '/tmp' } });

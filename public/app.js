@@ -377,6 +377,7 @@ async function loadFilePanel(path) {
   filePanelPath.textContent = path;
   filePanelContent.classList.add('hidden');
   filePanelList.classList.remove('hidden');
+  btnDownload.classList.add('hidden');
   filePanelList.innerHTML = '';
 
   try {
@@ -420,10 +421,15 @@ async function loadFilePanel(path) {
   } catch {}
 }
 
+let currentFilePath = null;
+const btnDownload = $('file-panel-download');
+
 async function loadFileContent(path) {
+  currentFilePath = path;
   filePanelPath.textContent = path;
   filePanelList.classList.add('hidden');
   filePanelContent.classList.remove('hidden');
+  btnDownload.classList.remove('hidden');
   filePanelContent.textContent = '加载中…';
   try {
     const res = await fetch(`/api/readfile?path=${encodeURIComponent(path)}`);
@@ -432,6 +438,11 @@ async function loadFileContent(path) {
     filePanelContent.textContent = content;
   } catch (e) { filePanelContent.textContent = `错误: ${e.message}`; }
 }
+
+btnDownload.addEventListener('click', () => {
+  if (!currentFilePath) return;
+  window.open(`/api/download?path=${encodeURIComponent(currentFilePath)}`, '_blank');
+});
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 initTerminal();
