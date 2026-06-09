@@ -157,11 +157,13 @@
 | 9 | @dispatch 自动路由 | C4 |
 | 10 | 跨 Agent 对话分析 + 记忆提取 | M3 |
 
-### Phase 4 — 扩展
-| 顺序 | 目标 | 涉及功能 |
+### Phase 4 — 移动客户端 & 接口层
+| 顺序 | 目标 | 设计文档 |
 |------|------|---------|
-| 11 | Worker 可替换验证（非 claude adapter） | A4 |
-| 12 | 记忆常用启动命令 | C11 |
+| 11 | 手机本地客户端 | [docs/design/mobile-client.md](docs/design/mobile-client.md) |
+| 12 | 统一接口层 (/api/v2) | [docs/design/mobile-client.md](docs/design/mobile-client.md) |
+| 13 | 版本更新后恢复对话状态 | [docs/design/session-restore.md](docs/design/session-restore.md) |
+| 14 | 选择模型名称 | [docs/design/model-selection.md](docs/design/model-selection.md) |
 
 ---
 
