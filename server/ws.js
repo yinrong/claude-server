@@ -18,14 +18,20 @@ export function handleWS(ws, req) {
 
     switch (msg.type) {
       case 'input':
-        agentManager.writeRaw(agentId, msg.data);
+        if (!agentManager.writeRaw(agentId, msg.data)) {
+          ws.send(JSON.stringify({ type: 'error', error: 'Agent 进程未运行' }));
+        }
         break;
       case 'resize':
         agentManager.resize(agentId, msg.cols, msg.rows);
         break;
       case 'msg':
         if (msg.content) {
-          agentManager.sendMessage(msg.agentId ?? agentId, msg.content);
+          try {
+            agentManager.sendMessage(msg.agentId ?? agentId, msg.content);
+          } catch (err) {
+            ws.send(JSON.stringify({ type: 'error', error: err.message }));
+          }
         }
         break;
       case 'chat':

@@ -60,6 +60,7 @@ class AgentManager extends EventEmitter {
   restartAgent(agentId, newConfig) {
     const session = this._sessions.get(agentId);
     if (!session) throw new Error(`Agent ${agentId} not found`);
+    session.adapter.removeAllListeners();
     session.adapter.restart(newConfig);
     setAgentConfig(agentId, newConfig);
     session.config.config = newConfig;
@@ -158,7 +159,9 @@ class AgentManager extends EventEmitter {
     const session = this._sessions.get(agentId);
     if (session?.adapter?.alive) {
       session.adapter.write(data);
+      return true;
     }
+    return false;
   }
 
   resize(agentId, cols, rows) {
@@ -241,6 +244,16 @@ Excerpt: ${text.slice(-1500)}`;
 
     adapter.on('exit', (code) => {
       if (session) session.waitingForInput = false;
+      clearTimeout(idleTimer);
+      // Auto-restart PTY adapter (slash commands like /resume cause internal exit)
+      if (adapter.type === 'claude-code') {
+        this._broadcast(agentId, { type: 'output', data: `\r\n[进程退出 (code ${code}), 正在重启...]\r\n` });
+        adapter.removeAllListeners();
+        adapter._spawn();
+        this._wireAdapter(agentId, adapter);
+        setAgentStatus(agentId, 'running');
+        return;
+      }
       setAgentStatus(agentId, 'stopped');
       this._broadcast(agentId, { type: 'exit', code });
     });

@@ -68,12 +68,13 @@ export class ClaudeCodeStreamAdapter extends EventEmitter {
     proc.stdin.write(newText);
     proc.stdin.end();
 
-    // Save user message to history
+    // Save user message to history (will be removed if turn fails)
     this._history.push({ role: 'user', content });
 
     // Parse stdout
     let buffer = '';
     let fullText = '';
+    let resultEmitted = false;
     const toolCalls = [];
 
     proc.stdout.on('data', (chunk) => {
@@ -85,23 +86,26 @@ export class ClaudeCodeStreamAdapter extends EventEmitter {
         if (!line.trim()) continue;
         try {
           const evt = JSON.parse(line);
+          if (evt.type === 'result') resultEmitted = true;
           this._handleEvent(evt, { fullText: () => fullText, setFullText: (t) => { fullText = t; }, toolCalls, setResultText: (t) => { resultText = t; } });
         } catch {}
       }
     });
 
-    proc.stderr.on('data', () => {});
+    let stderrBuf = '';
+    proc.stderr.on('data', (d) => { stderrBuf += d.toString(); });
 
     let resultText = '';
 
     return new Promise((resolve) => {
-      proc.on('close', () => {
+      proc.on('close', (code) => {
         // Process ALL remaining lines in buffer
         if (buffer.trim()) {
           for (const line of buffer.split('\n')) {
             if (!line.trim()) continue;
             try {
               const evt = JSON.parse(line);
+              if (evt.type === 'result') resultEmitted = true;
               this._handleEvent(evt, {
                 fullText: () => fullText,
                 setFullText: (t) => { fullText = t; },
@@ -114,6 +118,14 @@ export class ClaudeCodeStreamAdapter extends EventEmitter {
 
         const finalText = fullText || resultText;
 
+        // If process exited without emitting a 'result' event, emit one now
+        // so clients always exit streaming state
+        if (!resultEmitted) {
+          const errorMsg = stderrBuf.trim() || (code ? `进程退出 (code ${code})` : '');
+          const text = finalText || errorMsg || '';
+          this.emit('result', { text, isError: !!code || !finalText, usage: null });
+        }
+
         // Only save if not already saved in _handleEvent (race condition fix)
         if (!this._historySavedForCurrentTurn && finalText) {
           const assistantContent = [{ type: 'text', text: finalText }];
@@ -121,6 +133,11 @@ export class ClaudeCodeStreamAdapter extends EventEmitter {
             assistantContent.push({ type: 'tool_use', name: t.name, input: t.input });
           }
           this._history.push({ role: 'assistant', content: assistantContent });
+        }
+
+        // If no assistant response was saved, remove the orphaned user message
+        if (!this._historySavedForCurrentTurn && !finalText) {
+          this._history.pop();
         }
         this._historySavedForCurrentTurn = false;
 
