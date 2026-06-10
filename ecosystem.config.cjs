@@ -14,6 +14,19 @@ module.exports = {
       watch: false,
     },
     {
+      name: 'claude-server-prev',
+      script: 'server/index.js',
+      env: {
+        PORT: 4282,
+        DB_PATH: 'data/prev.db',
+        FILES_DIR: 'data/prev-files',
+        NODE_ENV: 'production',
+      },
+      restart_delay: 2000,
+      max_restarts: 20,
+      watch: false,
+    },
+    {
       name: 'claude-server-dev',
       script: 'server/index.js',
       env: {

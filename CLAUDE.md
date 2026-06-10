@@ -110,12 +110,13 @@ claude 自己管理对话历史和 session 持久化，服务端只负责 PTY I/
 
 **方案**：prod 和 dev 用不同端口 + 不同 DB，PM2 分别管理。代码更新只重启 dev，**绝不能** `pm2 delete all` 或 `pm2 restart all`。
 
-| 环境 | 端口 | DB | PM2 名 |
-|------|------|-----|--------|
-| prod | 4280 | data/prod.db | claude-server-prod |
-| dev | 4281 | data/dev.db | claude-server-dev |
-| test | 37890 | data/test.db | (Playwright 自动启停) |
-| smoke | 37891 | data/smoke-test.db | (Playwright 自动启停) |
+| 环境 | 端口 | DB | PM2 名 | 说明 |
+|------|------|-----|--------|------|
+| prod | 4280 | data/prod.db | claude-server-prod | 稳定版，不能随意重启 |
+| prev | 4282 | data/prev.db | claude-server-prev | 上一个 dev 版本快照，回退用 |
+| dev | 4281 | data/dev.db | claude-server-dev | 最新代码，随时重启 |
+| test | 37890 | data/test.db | (Playwright 自动启停) | E2E 测试 |
+| smoke | 37891 | data/smoke-test.db | (Playwright 自动启停) | UI smoke 测试 |
 
 更新代码后只执行：`pm2 restart claude-server-dev`
 
