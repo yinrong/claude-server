@@ -43,19 +43,6 @@ html, body, #app { height: 100%; background: #1e1e2e; color: #cdd6f4;
 #terminal-wrap { flex: 1; min-height: 0; overflow: hidden; }
 #terminal { height: 100%; }
 
-/* ── Virtual key bar ── */
-#keybar { display: flex; gap: 4px; padding: 6px 8px; background: #181825;
-  border-top: 1px solid #313244; flex-shrink: 0; align-items: center; }
-#keybar button, #keybar-extra button { background: #313244; color: #cdd6f4; border: 1px solid #45475a;
-  border-radius: 6px; padding: 6px 10px; font-size: 13px; font-weight: 600;
-  cursor: pointer; min-width: 36px; text-align: center; touch-action: manipulation; }
-#keybar button:active, #keybar-extra button:active { background: #cba6f7; color: #1e1e2e; }
-#keybar button[data-key="enter"] { background: #cba6f7; color: #1e1e2e; min-width: 56px; }
-#keybar-more { background: #27273a; border: 1px dashed #6c7086; color: #6c7086; }
-#keybar-extra { display: flex; gap: 4px; padding: 4px 8px; background: #11111b;
-  flex-shrink: 0; flex-wrap: wrap; }
-#keybar-extra.hidden { display: none; }
-
 .primary-btn { background: #cba6f7; color: #1e1e2e; border: none; border-radius: 8px;
   padding: 0 14px; font-weight: 700; cursor: pointer; font-size: 16px; min-height: 36px; }
 
@@ -121,14 +108,3 @@ html, body, #app { height: 100%; background: #1e1e2e; color: #cdd6f4;
 #file-panel-content { flex: 1; overflow: auto; padding: 10px 14px; font-size: 12px;
   color: #cdd6f4; background: #11111b; white-space: pre-wrap; word-break: break-all; margin: 0; }
 
-/* ── Mobile ── */
-@media (max-width: 768px) {
-  #sidebar { position: fixed; left: 0; top: 0; height: 100%; transform: translateX(-100%); }
-  #sidebar.open { transform: translateX(0); }
-  #btn-sidebar-toggle { display: block; position: relative; z-index: 25; }
-  #terminal-wrap { padding: 0; }
-  .xterm { font-size: 12px !important; }
-}
-@media (min-width: 769px) {
-  #btn-sidebar-toggle { display: none; }
-}

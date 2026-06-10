@@ -1,4 +1,4 @@
-import { agentManager } from '../core/agent-manager.js';
+import { agentManager } from './core/agent-manager.js';
 
 export function handleWS(ws, req) {
   const params = new URLSearchParams(req.url.replace(/^[^?]*/, ''));

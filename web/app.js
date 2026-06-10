@@ -16,23 +16,20 @@ const agentBadge   = $('agent-type-badge');
 const connDot      = $('conn-dot');
 const termContainer = $('terminal');
 const btnNew       = $('btn-new-agent');
-const btnToggle    = $('btn-sidebar-toggle');
 const btnAttach    = $('btn-attach');
 const fileInput    = $('file-input');
 const modalOverlay = $('modal-overlay');
 const ctxMenu      = $('context-menu');
-const keybar       = $('keybar');
 
 // ── xterm.js ─────────────────────────────────────────────────────────────────
 function initTerminal() {
   if (term) term.dispose();
   term = new Terminal({
     theme: { background: '#1e1e2e', foreground: '#cdd6f4', cursor: '#f5e0dc', selectionBackground: '#45475a' },
-    fontSize: window.innerWidth < 769 ? 12 : 14,
+    fontSize: 14,
     fontFamily: '"JetBrains Mono", "Fira Code", "Cascadia Code", "Menlo", monospace',
     scrollback: 50000,
     cursorBlink: true,
-    // Enable keyboard input on ALL devices (including mobile)
     disableStdin: false,
   });
   fitAddon = new FitAddon.FitAddon();
@@ -102,42 +99,6 @@ function handleMsg(msg) {
   }
 }
 
-// ── Virtual key bar ──────────────────────────────────────────────────────────
-const KEY_MAP = {
-  'enter':   '\r',
-  'newline': '\n',
-  'ctrl-c':  '\x03',
-  'ctrl-z':  '\x1a',
-  'ctrl-d':  '\x04',
-  'ctrl-l':  '\x0c',
-  'ctrl-a':  '\x01',
-  'ctrl-e':  '\x05',
-  'tab':     '\t',
-  'esc':     '\x1b',
-  'up':      '\x1b[A',
-  'down':    '\x1b[B',
-  'left':    '\x1b[D',
-  'right':   '\x1b[C',
-};
-
-const keybarExtra = $('keybar-extra');
-
-// Toggle extra keys
-$('keybar-more').addEventListener('click', () => {
-  keybarExtra.classList.toggle('hidden');
-});
-
-// Handle all key button clicks (both bars)
-document.addEventListener('click', (e) => {
-  const btn = e.target.closest('#keybar button[data-key], #keybar-extra button[data-key]');
-  if (!btn) return;
-  const seq = KEY_MAP[btn.dataset.key];
-  if (seq) {
-    queueSend({ type: 'input', data: seq });
-    term?.focus();
-  }
-});
-
 // ── Agent management ─────────────────────────────────────────────────────────
 let allAgents = [];
 
@@ -158,7 +119,7 @@ function renderAgentList(agents) {
     li.innerHTML = `<div class="agent-name">${a.name}</div>
       <div class="agent-meta">${a.type === 'master' ? '<span class="master-tag">M</span> ' : ''}
       <span class="${statusClass}">${statusIcon}</span></div>`;
-    li.addEventListener('click', () => { switchAgent(a.id, a); closeSidebar(); });
+    li.addEventListener('click', () => { switchAgent(a.id, a); });
     li.addEventListener('contextmenu', (e) => { e.preventDefault(); showContextMenu(e, a); });
     agentList.appendChild(li);
   }
@@ -195,10 +156,6 @@ $('ctx-delete').addEventListener('click', async () => {
   if (currentAgentId === ctxAgentId) { currentAgentId = null; term?.clear(); }
   await loadAgents();
 });
-
-// ── Sidebar toggle (mobile) ──────────────────────────────────────────────────
-function closeSidebar() { sidebar.classList.remove('open'); }
-btnToggle.addEventListener('click', () => sidebar.classList.toggle('open'));
 
 // ── New agent modal ──────────────────────────────────────────────────────────
 btnNew.addEventListener('click', () => {

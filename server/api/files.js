@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { storeFile } from '../../store/files.js';
+import { storeFile } from '../store/files.js';
 
 const router = Router();
 

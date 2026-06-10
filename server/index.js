@@ -8,8 +8,8 @@ import { mkdirSync, readdirSync, statSync, readFileSync } from 'fs';
 import agentsRouter from './api/agents.js';
 import filesRouter from './api/files.js';
 import { handleWS } from './ws.js';
-import { agentManager } from '../core/agent-manager.js';
-import { getAllMemory, getRecentCommands } from '../store/db.js';
+import { agentManager } from './core/agent-manager.js';
+import { getAllMemory, getRecentCommands } from './store/db.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const FILES_DIR = process.env.FILES_DIR ?? join(process.cwd(), 'data', 'files');
@@ -17,7 +17,7 @@ mkdirSync(FILES_DIR, { recursive: true });
 
 const app = express();
 app.use(express.json({ limit: '50mb' }));
-app.use(express.static(join(__dirname, '..', 'public')));
+app.use(express.static(join(__dirname, '..', 'web')));
 
 // Serve uploaded files
 app.use('/files', express.static(FILES_DIR));
@@ -80,7 +80,7 @@ app.get('/api/readfile', (req, res) => {
 });
 
 // Chat UI route (方案A)
-app.get('/chat', (_req, res) => res.sendFile('chat.html', { root: join(__dirname, '..', 'public') }));
+app.get('/chat', (_req, res) => res.sendFile('chat.html', { root: join(__dirname, '..', 'web') }));
 
 // Health
 app.get('/health', (_req, res) => res.json({ ok: true }));

@@ -200,14 +200,6 @@ input.addEventListener('input', () => {
   input.style.height = Math.min(input.scrollHeight, 150) + 'px';
 });
 
-// ── Quick keys ───────────────────────────────────────────────────────────────
-const KEY_MAP = { tab: '\t', esc: '\x1b', up: '\x1b[A', down: '\x1b[B' };
-$('quick-keys').addEventListener('click', e => {
-  const btn = e.target.closest('button[data-key]');
-  if (!btn) return;
-  queueSend({ type: 'input', data: KEY_MAP[btn.dataset.key] });
-});
-
 // ── Agent list ───────────────────────────────────────────────────────────────
 let allAgents = [];
 
@@ -235,12 +227,8 @@ function switchAgent(agent) {
   chatMsgs.innerHTML = '';
   streamBubble = null;
   setStreaming(false);
-  sidebar.classList.remove('open');
   connect(agent.id);
 }
-
-// ── Sidebar ──────────────────────────────────────────────────────────────────
-$('btn-menu').addEventListener('click', () => sidebar.classList.toggle('open'));
 
 // ── Compact ──────────────────────────────────────────────────────────────────
 $('btn-compact').addEventListener('click', () => {

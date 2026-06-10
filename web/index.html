@@ -2,7 +2,7 @@
 <html lang="zh">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Claude Hub</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.min.css" />
   <link rel="stylesheet" href="style.css" />
@@ -24,7 +24,6 @@
   <!-- ── Main panel ── -->
   <main id="main">
     <div id="toolbar">
-      <button id="btn-sidebar-toggle" class="icon-btn" title="菜单">☰</button>
       <span id="agent-label">未选择 Agent</span>
       <span id="agent-type-badge" class="badge hidden"></span>
       <button id="btn-history" class="icon-btn" title="加载更多历史">⏪</button>
@@ -40,28 +39,6 @@
       <div id="terminal"></div>
     </div>
 
-    <!-- Virtual key bar -->
-    <div id="keybar">
-      <!-- 常用：claude-code 交互必需 -->
-      <button data-key="enter" title="提交">Enter</button>
-      <button data-key="esc" title="取消/退出">Esc</button>
-      <button data-key="tab" title="Tab 补全/选择">Tab</button>
-      <button data-key="up" title="上一条/选上">↑</button>
-      <button data-key="down" title="下一条/选下">↓</button>
-      <!-- 更多 -->
-      <button id="keybar-more" title="更多按键">···</button>
-    </div>
-    <div id="keybar-extra" class="hidden">
-      <button data-key="left" title="←">←</button>
-      <button data-key="right" title="→">→</button>
-      <button data-key="newline" title="换行不提交">⏎</button>
-      <button data-key="ctrl-c" title="中断">^C</button>
-      <button data-key="ctrl-z" title="挂起">^Z</button>
-      <button data-key="ctrl-d" title="EOF">^D</button>
-      <button data-key="ctrl-l" title="清屏">^L</button>
-      <button data-key="ctrl-a" title="行首">^A</button>
-      <button data-key="ctrl-e" title="行尾">^E</button>
-    </div>
   </main>
 
 </div>

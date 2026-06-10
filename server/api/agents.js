@@ -1,6 +1,6 @@
 import { Router } from 'express';
-import { agentManager } from '../../core/agent-manager.js';
-import { getAllMemory, getRecentOutput, countOutput } from '../../store/db.js';
+import { agentManager } from '../core/agent-manager.js';
+import { getAllMemory, getRecentOutput, countOutput } from '../store/db.js';
 
 const router = Router();
 

@@ -11,30 +11,32 @@
 ## 架构
 
 ```
-Browser A (PC) / Browser B (手机)
-         │ WebSocket /ws?agentId=
-         ▼
-server/index.js  ──  server/ws.js
-         │
-core/agent-manager.js          ← 编排核心
-  ├── Map<agentId, {adapter, subscribers}>
-  ├── sendMessage()             ← 消息路由 + 广播
-  ├── @dispatch 解析            ← Master 自动派发给 Worker
-  └── _analyzeExchange()        ← 异步提取用户偏好到 memory 表
-         │
-core/adapter/
-  ├── base.js                   ← AIAdapter 抽象基类
-  ├── claude-code.js            ← spawn claude CLI（系统提示注入历史）
-  └── mock.js                   ← 测试用 echo 适配器
-         │
-store/
-  ├── db.js                     ← SQLite（agents / messages / files / memory）
-  └── files.js                  ← 文件/图片落盘（data/files/）
+PC Browser                    Mobile App (独立客户端)
+    │ WebSocket /ws?agentId=       │
+    ▼                              ▼
+server/                        ← 服务端（统一后端）
+  ├── index.js                 ← Express + WS 入口
+  ├── ws.js                    ← WebSocket 消息处理
+  ├── api/                     ← REST API 路由
+  ├── core/
+  │   ├── agent-manager.js     ← 编排核心
+  │   └── adapter/
+  │       ├── base.js          ← AIAdapter 抽象基类
+  │       ├── claude-code.js   ← spawn claude CLI (PTY)
+  │       ├── claude-code-stream.js ← stream-json API 模式
+  │       └── mock.js          ← 测试用 echo 适配器
+  └── store/
+      ├── db.js                ← SQLite（agents / messages / files / memory）
+      └── files.js             ← 文件/图片落盘（data/files/）
 
-public/                         ← 纯静态前端（无构建步骤）
-  ├── index.html
-  ├── app.js                    ← WS 客户端、聊天渲染、图片粘贴
-  └── style.css                 ← Catppuccin Mocha 主题
+web/                           ← PC Web 客户端（纯静态，无构建步骤）
+  ├── index.html               ← PTY 终端 UI (xterm.js)
+  ├── app.js                   ← WS 客户端、终端渲染、图片粘贴
+  ├── chat.html                ← Chat 气泡 UI (stream adapter)
+  ├── chat.js                  ← Chat UI 逻辑
+  └── style.css / chat.css     ← Catppuccin Mocha 主题
+
+mobile/                        ← 手机客户端（独立项目，待开发）
 ```
 
 查看所有 API 路由：`grep -rn "app\.\|router\." server/ | grep -E "\.(get|post|put|patch|delete)\("`
@@ -83,7 +85,7 @@ Browser ↔ WebSocket ↔ 中间层(Server) ↔ Adapter ↔ claude-code / 其他
 
 1. **完整 claude-code 功能** — 所有 slash commands（/resume, /compact, /clear）必须可用，不能用 --print 模式
 2. **服务端持续运行** — 不受客户端关闭影响
-3. **多端同时控制** — 手机和 PC 同时随意在某一端控制
+3. **多端同时控制** — PC Web + 手机客户端同时控制
 4. **图片/文件/文字** — 多模态支持
 5. **持续探索不停下** — Agent 自主工作，不停下询问用户（--dangerously-skip-permissions + 自主循环）
 6. **Worker 可替换** — 接口层抽象，未来适配其他工具

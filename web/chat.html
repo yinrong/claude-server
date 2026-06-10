@@ -2,7 +2,7 @@
 <html lang="zh">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Claude Hub - Chat</title>
   <link rel="stylesheet" href="chat.css" />
 </head>
@@ -21,7 +21,6 @@
   <!-- Main -->
   <main id="main">
     <div id="toolbar">
-      <button id="btn-menu" class="tb-btn">☰</button>
       <span id="agent-label">未选择</span>
       <span id="status-badge"></span>
       <button id="btn-compact" class="tb-btn" title="压缩历史">📦</button>
@@ -39,12 +38,6 @@
 
     <!-- Input area -->
     <div id="input-area">
-      <div id="quick-keys">
-        <button data-key="tab">Tab</button>
-        <button data-key="esc">Esc</button>
-        <button data-key="up">↑</button>
-        <button data-key="down">↓</button>
-      </div>
       <div id="input-row">
         <textarea id="input" rows="1" placeholder="输入消息…"></textarea>
         <button id="btn-send">↑</button>
