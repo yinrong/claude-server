@@ -30,7 +30,7 @@ module.exports = {
       name: 'claude-server-dev',
       script: 'server/index.js',
       env: {
-        PORT: 4283,
+        PORT: 4282,
         DB_PATH: 'data/dev-next.db',
         FILES_DIR: 'data/dev-next-files',
         NODE_ENV: 'development',
