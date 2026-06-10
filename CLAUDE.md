@@ -113,8 +113,8 @@ claude 自己管理对话历史和 session 持久化，服务端只负责 PTY I/
 | 环境 | 端口 | DB | PM2 名 | 说明 |
 |------|------|-----|--------|------|
 | prod | 4280 | data/prod.db | claude-server-prod | 稳定版，不能随意重启 |
-| prev | 4282 | data/prev.db | claude-server-prev | 上一个 dev 版本快照，回退用 |
-| dev | 4281 | data/dev.db | claude-server-dev | 最新代码，随时重启 |
+| prev | 4281 | data/dev.db | claude-server-prev | 上一个 dev 版本，回退用 |
+| dev | 4283 | data/dev-next.db | claude-server-dev | 最新代码，随时重启 |
 | test | 37890 | data/test.db | (Playwright 自动启停) | E2E 测试 |
 | smoke | 37891 | data/smoke-test.db | (Playwright 自动启停) | UI smoke 测试 |
 
