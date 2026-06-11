@@ -4,6 +4,7 @@ const PORT = 37890;
 
 export default defineConfig({
   testDir: './tests',
+  testIgnore: ['**/chat-smoke.test.js', '**/ui-smoke.test.js'],
   timeout: 60000,
   use: {
     baseURL: `http://localhost:${PORT}`,

@@ -4,11 +4,11 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { randomUUID } from 'crypto';
 
-const DATA_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'data');
+const DATA_DIR = join(process.cwd(), 'data');
 mkdirSync(DATA_DIR, { recursive: true });
 
 const dbPath = process.env.DB_PATH
-  ? join(dirname(fileURLToPath(import.meta.url)), '..', process.env.DB_PATH)
+  ? join(process.cwd(), process.env.DB_PATH)
   : join(DATA_DIR, 'claude-server.db');
 
 const db = new Database(dbPath);
