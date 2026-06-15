@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { agentManager } from '../core/agent-manager.js';
-import { getAllMemory, getRecentOutput, countOutput } from '../store/db.js';
+import { getAllMemory, getRecentOutput, countOutput, setAgentSessionId } from '../store/db.js';
 
 const router = Router();
 
@@ -24,10 +24,10 @@ router.get('/summaries', (_req, res) => {
 
 // POST /api/agents
 router.post('/', (req, res) => {
-  const { name, type, adapterType, config } = req.body ?? {};
+  const { name, type, adapterType, config, providerId } = req.body ?? {};
   if (!name) return res.status(400).json({ error: 'name required' });
   try {
-    const id = agentManager.createAgent({ name, type, adapterType, config });
+    const id = agentManager.createAgent({ name, type, adapterType, config, providerId });
     const agent = agentManager.getAgent(id);
     res.status(201).json(agent);
   } catch (err) {
@@ -72,8 +72,23 @@ router.post('/:id/restart', (req, res) => {
   const agent = agentManager.getAgent(id);
   if (!agent) return res.status(404).json({ error: 'not found' });
   const newConfig = { ...agent.config, ...(cwd ? { cwd } : {}) };
+  // Inject last_session_id as resumeSessionId for PTY adapter
+  if (agent.last_session_id) {
+    newConfig.resumeSessionId = agent.last_session_id;
+  }
   agentManager.restartAgent(id, newConfig);
   res.json({ ok: true, cwd: newConfig.cwd });
+});
+
+// POST /api/agents/:id/set-session — persist last_session_id to DB
+router.post('/:id/set-session', (req, res) => {
+  const { id } = req.params;
+  const { sessionId } = req.body ?? {};
+  if (!sessionId) return res.status(400).json({ error: 'sessionId required' });
+  const agent = agentManager.getAgent(id);
+  if (!agent) return res.status(404).json({ error: 'not found' });
+  setAgentSessionId(id, sessionId);
+  res.json({ ok: true, sessionId });
 });
 
 // POST /api/agents/:id/analyze — trigger memory extraction from recent output

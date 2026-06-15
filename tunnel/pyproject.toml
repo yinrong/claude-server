@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "ai-hub-tunnel"
+version = "0.1.0"
+description = "ai-hub tunnel client — connects internal LLM to the X coordinator"
+requires-python = ">=3.10"
+dependencies = [
+    "aiohttp>=3.9",
+]
+
+[project.scripts]
+ai-hub-tunnel = "tunnel.__main__:main"
+
+[tool.setuptools.packages.find]
+where = [".."]
+include = ["tunnel*"]

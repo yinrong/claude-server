@@ -157,13 +157,52 @@ $('ctx-delete').addEventListener('click', async () => {
   await loadAgents();
 });
 
+// ── Model list helpers ────────────────────────────────────────────────────────
+async function loadModels() {
+  try {
+    const res = await fetch('/api/models');
+    if (!res.ok) return;
+    const models = await res.json();
+    const select = $('modal-model');
+    const prev = select.value;
+    select.innerHTML = '';
+    // blank option (no model specified)
+    const blank = document.createElement('option');
+    blank.value = '';
+    blank.textContent = '（默认）';
+    select.appendChild(blank);
+    for (const m of models) {
+      const opt = document.createElement('option');
+      opt.value = m.name;
+      opt.textContent = m.name;
+      select.appendChild(opt);
+    }
+    // restore previous selection if still valid
+    if (prev && [...select.options].some(o => o.value === prev)) select.value = prev;
+  } catch {}
+}
+
+$('modal-model-refresh').addEventListener('click', async () => {
+  const btn = $('modal-model-refresh');
+  btn.disabled = true;
+  btn.textContent = '⏳';
+  try {
+    await fetch('/api/models/refresh', { method: 'POST' });
+    await loadModels();
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '🔄';
+  }
+});
+
 // ── New agent modal ──────────────────────────────────────────────────────────
-btnNew.addEventListener('click', () => {
+btnNew.addEventListener('click', async () => {
   $('modal-name').value = '';
   $('modal-cwd').value = '/home';
   modalOverlay.classList.remove('hidden');
   $('modal-name').focus();
   loadBrowse('/home');
+  await loadModels();
 });
 $('modal-cancel').addEventListener('click', () => modalOverlay.classList.add('hidden'));
 document.addEventListener('keydown', e => {
@@ -174,10 +213,13 @@ document.addEventListener('keydown', e => {
 $('modal-confirm').addEventListener('click', async () => {
   const name = $('modal-name').value.trim();
   if (!name) return;
+  const model = $('modal-model').value;
+  const config = { cwd: $('modal-cwd').value || '/tmp' };
+  if (model) config.model = model;
   const res = await fetch('/api/agents', {
     method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ name, type: $('modal-type').value, adapterType: $('modal-adapter').value,
-      config: { cwd: $('modal-cwd').value || '/tmp' } }),
+      config }),
   });
   const agent = await res.json();
   modalOverlay.classList.add('hidden');

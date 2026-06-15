@@ -59,7 +59,7 @@ export class ClaudeCodeStreamAdapter extends EventEmitter {
     const proc = spawn(claudeBin, args, {
       cwd,
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env },
+      env: { ...process.env, ...(this.config._providerEnv ?? {}) },
     });
     this._proc = proc;
 

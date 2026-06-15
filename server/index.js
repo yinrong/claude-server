@@ -7,6 +7,9 @@ import { mkdirSync, readdirSync, statSync, readFileSync } from 'fs';
 
 import agentsRouter from './api/agents.js';
 import filesRouter from './api/files.js';
+import modelsRouter from './api/models.js';
+import v2Router from './api/v2.js';
+import providersRouter from './api/providers.js';
 import { handleWS } from './ws.js';
 import { agentManager } from './core/agent-manager.js';
 import { getAllMemory, getRecentCommands } from './store/db.js';
@@ -25,6 +28,9 @@ app.use('/files', express.static(FILES_DIR));
 // API routes
 app.use('/api/agents', agentsRouter);
 app.use('/api/files', filesRouter);
+app.use('/api/models', modelsRouter);
+app.use('/api/v2', v2Router);
+app.use('/api/providers', providersRouter);
 
 // Memory endpoint
 app.get('/api/memory', (_req, res) => { res.json(getAllMemory()); });
@@ -81,6 +87,12 @@ app.get('/api/readfile', (req, res) => {
 
 // Chat UI route (方案A)
 app.get('/chat', (_req, res) => res.sendFile('chat.html', { root: join(__dirname, '..', 'web') }));
+
+// Trigger restoreFromDB (for testing and manual restore)
+app.post('/api/restore', (_req, res) => {
+  agentManager.restoreFromDB();
+  res.json({ ok: true });
+});
 
 // Health
 app.get('/health', (_req, res) => res.json({ ok: true }));

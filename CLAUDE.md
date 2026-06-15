@@ -1,8 +1,8 @@
 > 与用户对话时称呼"主人"。
 
-# claude-server
+# ai-hub
 
-多 Agent 编排中枢。以 Web UI 统一管理多个 claude-code 实例，支持图片/文件、多端同时控制、Master 自动学习用户偏好并通过 `@dispatch` 派发任务给 Worker。
+多 Agent 编排与 LLM 路由平台。以 Web UI 统一管理多个 claude-code 实例，内置 LLM API 路由层（router）和内网穿透（tunnel），支持图片/文件、多端同时控制、Master 自动学习用户偏好并通过 `@dispatch` 派发任务给 Worker。
 
 ## 快速启动
 
@@ -11,10 +11,10 @@
 ## 架构
 
 ```
-PC Browser                    Mobile App (独立客户端)
+PC Browser                    Mobile App (Flutter)
     │ WebSocket /ws?agentId=       │
     ▼                              ▼
-server/                        ← 服务端（统一后端）
+server/                        ← Node.js 服务端（统一后端，:4280）
   ├── index.js                 ← Express + WS 入口
   ├── ws.js                    ← WebSocket 消息处理
   ├── api/                     ← REST API 路由
@@ -29,6 +29,19 @@ server/                        ← 服务端（统一后端）
       ├── db.js                ← SQLite（agents / messages / files / memory）
       └── files.js             ← 文件/图片落盘（data/files/）
 
+router/                        ← Python LLM 路由层（aiohttp，:8443）
+  ├── relay.py                 ← 多租户 WS 隧道 + API 路由
+  ├── db.py                    ← SQLite（group/client/audit）
+  └── scripts/                 ← 安装脚本模板（c.sh、a.sh、a.ps1）
+
+tunnel/                        ← Python 内网穿透客户端（独立部署）
+  └── _server.py               ← 主动出站连接 router，转发内网 LLM API
+
+llm/                           ← Python LLM 访问包
+  ├── __init__.py              ← get_llm() 工厂入口
+  ├── _conf.py                 ← 连接配置（从环境变量读取）
+  └── _client.py               ← OpenAI/Anthropic 双后端实现
+
 web/                           ← PC Web 客户端（纯静态，无构建步骤）
   ├── index.html               ← PTY 终端 UI (xterm.js)
   ├── app.js                   ← WS 客户端、终端渲染、图片粘贴
@@ -36,10 +49,10 @@ web/                           ← PC Web 客户端（纯静态，无构建步�
   ├── chat.js                  ← Chat UI 逻辑
   └── style.css / chat.css     ← Catppuccin Mocha 主题
 
-mobile/                        ← 手机客户端（独立项目，待开发）
+mobile/                        ← Flutter 手机客户端（开发中）
 ```
 
-查看所有 API 路由：`grep -rn "app\.\|router\." server/ | grep -E "\.(get|post|put|patch|delete)\("`
+查看所有 server API 路由：`grep -rn "app\.\|router\." server/ | grep -E "\.(get|post|put|patch|delete)\("`
 
 ## Agent 类型
 
@@ -120,7 +133,49 @@ claude 自己管理对话历史和 session 持久化，服务端只负责 PTY I/
 | test | 37890 | data/test.db | (Playwright 自动启停) | E2E 测试 |
 | smoke | 37891 | data/smoke-test.db | (Playwright 自动启停) | UI smoke 测试 |
 
-更新代码后只执行：`pm2 restart claude-server-dev`
+### 部署流程（关键！）
+
+所有环境变量和进程统一在 `ecosystem.config.cjs` 中声明，**不依赖 shell 环境继承**。
+
+**依赖关系**：`model-fix-proxy` 必须先于所有 server 启动（server 内的 claude PTY 进程通过 proxy 访问 API）。
+
+#### 首次部署 / 全量重建
+
+```bash
+pm2 delete all                    # ⚠️ 仅首次或确认可中断时
+pm2 start ecosystem.config.cjs   # 按顺序启动：proxy → prod → prev → dev
+pm2 save                          # 持久化进程列表
+```
+
+#### 日常开发：只更新 dev
+
+```bash
+pm2 restart claude-server-dev
+```
+
+#### 发布到 prod（需用户确认）
+
+```bash
+# 1. dev 验证通过后
+pm2 restart claude-server-prod    # ⚠️ 会中断正在运行的 Agent
+```
+
+#### 新增/修改环境变量后
+
+改 `ecosystem.config.cjs` 后，必须 delete + start 才能使新 env 生效（pm2 restart 不会重载 env）：
+
+```bash
+pm2 delete claude-server-dev && pm2 start ecosystem.config.cjs --only claude-server-dev
+# prod 同理，但需先确认
+```
+
+#### 常见错误
+
+| 错误现象 | 原因 | 修复 |
+|----------|------|------|
+| 400 Param Incorrect | claude PTY 的 ANTHROPIC_BASE_URL 没走 proxy | delete + start 重载 env |
+| model-fix-proxy 没启动 | ecosystem 中缺少 proxy 定义 | `pm2 start ecosystem.config.cjs --only model-fix-proxy` |
+| restart 后 env 没变 | pm2 restart 不重载 env | 必须 delete + start |
 
 ### Agent waitingForInput 检测
 
@@ -206,4 +261,4 @@ xvfb-run --auto-servernum npx playwright test --config=playwright.smoke.config.j
 | `FILES_DIR` | `data/files` | 上传文件存储目录 |
 | `CLAUDE_BIN` | `claude` | claude CLI 路径 |
 
-> 对用户的称呼前加项目名前缀，如"[claude-server] 主人"。
+> 对用户的称呼前加项目名前缀，如"[ai-hub] 主人"。

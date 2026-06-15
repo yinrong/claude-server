@@ -22,7 +22,8 @@ db.exec(`
     adapter_type TEXT NOT NULL DEFAULT 'claude-code',
     config TEXT NOT NULL DEFAULT '{}',     -- JSON: {cwd, systemPrompt, ...}
     status TEXT NOT NULL DEFAULT 'idle',   -- 'idle' | 'running' | 'error'
-    created_at INTEGER NOT NULL
+    created_at INTEGER NOT NULL,
+    last_session_id TEXT                   -- claude session id for --resume on restart
   );
 
   CREATE TABLE IF NOT EXISTS messages (
@@ -71,12 +72,57 @@ db.exec(`
     updated_at INTEGER NOT NULL,
     UNIQUE(category, key)
   );
+
+  CREATE TABLE IF NOT EXISTS models (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,
+    display_name TEXT,
+    updated_at TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS providers (
+    id TEXT PRIMARY KEY,
+    name TEXT UNIQUE NOT NULL,
+    base_url TEXT NOT NULL,
+    auth_token TEXT NOT NULL,
+    use_model_proxy INTEGER NOT NULL DEFAULT 0,
+    is_default INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL
+  );
 `);
+
+// ── Migrations ─────────────────────────────────────────────────────────────
+// Add last_session_id column to agents if it doesn't exist (idempotent migration)
+try {
+  db.exec(`ALTER TABLE agents ADD COLUMN last_session_id TEXT`);
+} catch (_e) {
+  // Column already exists — ignore
+}
+
+// Add provider_id column to agents if it doesn't exist (idempotent migration)
+try {
+  db.exec(`ALTER TABLE agents ADD COLUMN provider_id TEXT`);
+} catch (_e) {
+  // Column already exists — ignore
+}
+
+// ── Providers seed ────────────────────────────────────────────────────────
+// On first startup (providers table empty), seed from env vars
+{
+  const providerCount = db.prepare('SELECT COUNT(*) as n FROM providers').get();
+  if (providerCount.n === 0) {
+    const baseUrl = process.env.ANTHROPIC_BASE_URL ?? 'https://api.anthropic.com';
+    const authToken = process.env.ANTHROPIC_AUTH_TOKEN ?? process.env.ANTHROPIC_API_KEY ?? '';
+    db.prepare(
+      'INSERT INTO providers (id, name, base_url, auth_token, use_model_proxy, is_default, created_at) VALUES (?,?,?,?,?,?,?)'
+    ).run(randomUUID(), 'mify', baseUrl, authToken, 0, 1, Date.now());
+  }
+}
 
 // ── Agents ────────────────────────────────────────────────────────────────
 
 const insertAgent = db.prepare(
-  'INSERT INTO agents (id, name, type, adapter_type, config, status, created_at) VALUES (?,?,?,?,?,?,?)'
+  'INSERT INTO agents (id, name, type, adapter_type, config, status, created_at, provider_id) VALUES (?,?,?,?,?,?,?,?)'
 );
 const selectAgent = db.prepare('SELECT * FROM agents WHERE id = ?');
 const selectAllAgents = db.prepare('SELECT * FROM agents ORDER BY created_at DESC');
@@ -85,7 +131,8 @@ const updateAgentConfig = db.prepare('UPDATE agents SET config = ? WHERE id = ?'
 
 export function saveAgent({ name, type = 'worker', adapterType = 'claude-code', config = {}, status = 'idle' }) {
   const id = randomUUID();
-  insertAgent.run(id, name, type, adapterType, JSON.stringify(config), status, Date.now());
+  const providerId = config.providerId ?? null;
+  insertAgent.run(id, name, type, adapterType, JSON.stringify(config), status, Date.now(), providerId);
   return id;
 }
 
@@ -105,6 +152,12 @@ export function setAgentStatus(id, status) {
 
 export function setAgentConfig(id, config) {
   updateAgentConfig.run(JSON.stringify(config), id);
+}
+
+const updateAgentSessionId = db.prepare('UPDATE agents SET last_session_id = ? WHERE id = ?');
+
+export function setAgentSessionId(id, sessionId) {
+  updateAgentSessionId.run(sessionId, id);
 }
 
 const deleteAgentStmt = db.prepare('DELETE FROM agents WHERE id = ?');
@@ -220,6 +273,14 @@ export function countOutput(agentId) {
   return countOutputStmt.get(agentId).n;
 }
 
+const selectOutputSinceTs = db.prepare(
+  'SELECT data FROM output_buffer WHERE agent_id = ? AND ts > ? ORDER BY id ASC LIMIT ?'
+);
+
+export function getOutputSinceTs(agentId, sinceTs, limit = 5000) {
+  return selectOutputSinceTs.all(agentId, sinceTs, limit).map(r => r.data);
+}
+
 // ── Recent Commands ──────────────────────────────────────────────────────
 
 const insertCommand = db.prepare(
@@ -235,4 +296,87 @@ export function recordCommand(cwd, adapterType = 'claude-code') {
 
 export function getRecentCommands() {
   return selectRecentCommands.all();
+}
+
+// ── Models ────────────────────────────────────────────────────────────────
+
+const upsertModel = db.prepare(`
+  INSERT INTO models (name, display_name, updated_at)
+  VALUES (?, ?, ?)
+  ON CONFLICT(name) DO UPDATE SET
+    display_name = excluded.display_name,
+    updated_at = excluded.updated_at
+`);
+const selectAllModels = db.prepare('SELECT * FROM models ORDER BY id ASC');
+
+export function upsertModels(models) {
+  const now = new Date().toISOString();
+  const upsertMany = db.transaction((list) => {
+    for (const m of list) {
+      upsertModel.run(m.name, m.display_name ?? m.name, now);
+    }
+  });
+  upsertMany(models);
+}
+
+export function getAllModels() {
+  return selectAllModels.all();
+}
+
+// ── Providers ─────────────────────────────────────────────────────────────
+
+const insertProvider = db.prepare(
+  'INSERT INTO providers (id, name, base_url, auth_token, use_model_proxy, is_default, created_at) VALUES (?,?,?,?,?,?,?)'
+);
+const selectProvider = db.prepare('SELECT * FROM providers WHERE id = ?');
+const selectDefaultProvider = db.prepare('SELECT * FROM providers WHERE is_default = 1 LIMIT 1');
+const selectAllProviders = db.prepare('SELECT * FROM providers ORDER BY created_at ASC');
+const deleteProviderStmt = db.prepare('DELETE FROM providers WHERE id = ?');
+const clearDefaultProviders = db.prepare('UPDATE providers SET is_default = 0');
+const setDefaultProviderStmt = db.prepare('UPDATE providers SET is_default = 1 WHERE id = ?');
+const countAgentsByProvider = db.prepare('SELECT COUNT(*) as n FROM agents WHERE provider_id = ?');
+
+export function saveProvider({ name, base_url, auth_token, use_model_proxy = 0, is_default = 0 }) {
+  const id = randomUUID();
+  if (is_default) {
+    clearDefaultProviders.run();
+  }
+  insertProvider.run(id, name, base_url, auth_token, use_model_proxy ? 1 : 0, is_default ? 1 : 0, Date.now());
+  return id;
+}
+
+export function getProvider(id) {
+  return selectProvider.get(id) ?? null;
+}
+
+export function getDefaultProvider() {
+  return selectDefaultProvider.get() ?? null;
+}
+
+export function getAllProviders() {
+  return selectAllProviders.all();
+}
+
+export function updateProvider(id, fields) {
+  const allowed = ['name', 'base_url', 'auth_token', 'use_model_proxy', 'is_default'];
+  const updates = Object.entries(fields).filter(([k]) => allowed.includes(k));
+  if (updates.length === 0) return;
+  const setClauses = updates.map(([k]) => `${k} = ?`).join(', ');
+  const values = updates.map(([, v]) => v);
+  db.prepare(`UPDATE providers SET ${setClauses} WHERE id = ?`).run(...values, id);
+}
+
+export function deleteProvider(id) {
+  const ref = countAgentsByProvider.get(id);
+  if (ref && ref.n > 0) throw new Error(`Provider is referenced by ${ref.n} agent(s)`);
+  deleteProviderStmt.run(id);
+}
+
+export function setDefaultProvider(id) {
+  const provider = selectProvider.get(id);
+  if (!provider) throw new Error(`Provider not found: ${id}`);
+  db.transaction(() => {
+    clearDefaultProviders.run();
+    setDefaultProviderStmt.run(id);
+  })();
 }

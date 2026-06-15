@@ -20,16 +20,19 @@ export class ClaudeCodeAdapter extends AIAdapter {
   get alive() { return !this._exited && this._pty !== null; }
 
   _spawn() {
-    const { cwd = process.cwd() } = this.config;
+    const { cwd = process.cwd(), model, resumeSessionId } = this.config;
     const claudeBin = process.env.CLAUDE_BIN ?? 'claude';
 
+    const modelArgs = model ? ['--model', model] : [];
+    const resumeArgs = resumeSessionId ? ['--resume', resumeSessionId] : [];
+
     this._exited = false;
-    this._pty = pty.spawn(claudeBin, ['--dangerously-skip-permissions'], {
+    this._pty = pty.spawn(claudeBin, ['--dangerously-skip-permissions', ...modelArgs, ...resumeArgs], {
       name: 'xterm-256color',
       cols: this.config.cols ?? 80,
       rows: this.config.rows ?? 24,
       cwd,
-      env: { ...process.env, TERM: 'xterm-256color' },
+      env: { ...process.env, ...(this.config._providerEnv ?? {}), TERM: 'xterm-256color' },
     });
 
     this._pty.onData((data) => {

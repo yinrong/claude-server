@@ -2,17 +2,24 @@
 
 ## 需求背景
 
-当前 Agent 创建时固定使用系统默认模型（通过环境变量 `ANTHROPIC_DEFAULT_*_MODEL` 设置）。用户需要能为每个 Agent 选择不同的模型。
+当前 Agent 创建时固定使用系统默认模型。用户需要能为每个 Agent 选择不同的模型。
 
-## 方案设计
+## 已确认决策
+
+| 项 | 决策 |
+|----|------|
+| 模型列表来源 | 手动维护列表 + UI 提供"刷新"按钮重新拉取 |
+| 运行中切换模型 | 不支持（切换需重建 Agent） |
+
+## 方案
 
 ### 接口变更
 
-创建/编辑 Agent 时 config 增加 `model` 字段：
+创建 Agent 时 config 增加 `model` 字段：
 ```json
 {
   "name": "FastWorker",
-  "adapterType": "claude-code-stream",
+  "adapterType": "claude-code",
   "config": {
     "cwd": "/home/project",
     "model": "claude-sonnet-4-6"
@@ -20,38 +27,28 @@
 }
 ```
 
-### 实现
-
-**PTY adapter：**
-```js
-pty.spawn('claude', ['--dangerously-skip-permissions', '--model', config.model], { cwd })
+新增 API：
+```
+GET /api/models        — 返回可用模型列表（从 DB 缓存或 proxy 拉取）
+POST /api/models/refresh — 触发重新从 proxy 拉取模型列表
 ```
 
-**Stream adapter：**
+### PTY adapter 实现
 ```js
-const args = ['--print', '--output-format', 'stream-json', '--model', config.model, ...]
+const modelArgs = config.model ? ['--model', config.model] : []
+pty.spawn('claude', ['--dangerously-skip-permissions', ...modelArgs], { cwd })
 ```
 
 ### 前端
 
 创建 Agent 弹窗增加模型选择下拉框：
-- 选项从 `/api/models` 接口获取（或硬编码常用模型列表）
-- 默认选中系统默认模型
+- 默认显示 DB 中缓存的模型列表
+- 提供"刷新"按钮触发 `POST /api/models/refresh`
+- 无模型选择时使用系统默认
 
-### 可用模型列表
+### DB schema 变更
 
+新增 `models` 表：
+```sql
+models (id, name, display_name, updated_at)
 ```
-claude-opus-4-6
-claude-sonnet-4-6
-claude-haiku-4-5
-```
-
-或从用户配置的 proxy 动态获取（如果 proxy 支持 list models API）。
-
----
-
-## 待确认问题
-
-1. 模型列表从哪获取？硬编码 vs 动态查询 proxy？
-2. 是否允许运行中切换模型（需要 restart agent）？
-3. 是否需要显示每个模型的成本/速度信息？

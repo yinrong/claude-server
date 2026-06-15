@@ -525,3 +525,452 @@ test('T25: creating agent with non-existent cwd auto-creates the directory', asy
   // Cleanup
   fs.rmdirSync(testDir);
 });
+
+// ── MS1: Agent creation with model field ─────────────────────────────────
+test('MS1: create agent with model field stores model in config', async ({ request }) => {
+  const res = await request.post('/api/agents', {
+    data: {
+      name: 'ModelWorker',
+      type: 'worker',
+      adapterType: 'mock',
+      config: { cwd: '/tmp', model: 'claude-opus-4-8' },
+    },
+  });
+  expect(res.status()).toBe(201);
+  const agent = await res.json();
+  expect(agent).toHaveProperty('id');
+
+  // Fetch agent info and verify model is stored
+  const infoRes = await request.get(`/api/agents/${agent.id}`);
+  expect(infoRes.status()).toBe(200);
+  const info = await infoRes.json();
+  expect(info.config).toHaveProperty('model', 'claude-opus-4-8');
+});
+
+// ── MS2a: POST /api/models/refresh populates models table ────────────────
+test('MS2a: POST /api/models/refresh returns model list and persists to DB', async ({ request }) => {
+  const res = await request.post('/api/models/refresh');
+  expect(res.status()).toBe(200);
+  const body = await res.json();
+  expect(body).toHaveProperty('ok', true);
+  expect(Array.isArray(body.models)).toBe(true);
+  expect(body.models.length).toBeGreaterThan(0);
+  // Each model has name field
+  expect(body.models[0]).toHaveProperty('name');
+});
+
+// ── MS2b: GET /api/models returns persisted model list ───────────────────
+test('MS2b: GET /api/models returns model list from DB', async ({ request }) => {
+  // Ensure models are populated first
+  await request.post('/api/models/refresh');
+
+  const res = await request.get('/api/models');
+  expect(res.status()).toBe(200);
+  const models = await res.json();
+  expect(Array.isArray(models)).toBe(true);
+  expect(models.length).toBeGreaterThan(0);
+
+  // Should include expected default models
+  const names = models.map(m => m.name);
+  expect(names).toContain('claude-sonnet-4-6');
+});
+
+// ── MS2c: Default model list contains expected models ────────────────────
+test('MS2c: default model list includes claude-opus-4-8 and claude-haiku-4-5', async ({ request }) => {
+  await request.post('/api/models/refresh');
+  const res = await request.get('/api/models');
+  const models = await res.json();
+  const names = models.map(m => m.name);
+  expect(names).toContain('claude-opus-4-8');
+  expect(names).toContain('claude-haiku-4-5');
+});
+
+// ── T28: Session restore — last_session_id persisted and used on restart ──────
+test('T28: agent last_session_id is saved and used on restart', async () => {
+  // Step 1: Create a mock agent
+  const agentId = await createAgent({ name: 'SessionAgent' });
+
+  // Step 2: Set a fake session_id via API
+  const fakeSessionId = 'test-session-abc123';
+  const setRes = await fetch(`${BASE}/api/agents/${agentId}/set-session`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sessionId: fakeSessionId }),
+  });
+  expect(setRes.status).toBe(200);
+  const setBody = await setRes.json();
+  expect(setBody.ok).toBe(true);
+
+  // Step 3: GET agent should return last_session_id
+  const infoRes = await fetch(`${BASE}/api/agents/${agentId}`);
+  const info = await infoRes.json();
+  expect(info.last_session_id).toBe(fakeSessionId);
+
+  // Step 4: Restart the agent — adapter should receive resumeSessionId in config
+  const restartRes = await fetch(`${BASE}/api/agents/${agentId}/restart`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({}),
+  });
+  expect(restartRes.status).toBe(200);
+
+  // Step 5: After restart, config should include resumeSessionId
+  await sleep(300);
+  const afterRes = await fetch(`${BASE}/api/agents/${agentId}`);
+  const after = await afterRes.json();
+  expect(after.config.resumeSessionId).toBe(fakeSessionId);
+});
+
+// ── T29: Session restore on server startup (restoreFromDB uses last_session_id) ─
+test('T29: restoreFromDB passes last_session_id as resumeSessionId to adapter', async () => {
+  // Step 1: Create a mock agent and set its last_session_id
+  const agentId = await createAgent({ name: 'RestoreAgent' });
+  const fakeSessionId = 'restore-session-xyz789';
+
+  const setRes = await fetch(`${BASE}/api/agents/${agentId}/set-session`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sessionId: fakeSessionId }),
+  });
+  expect(setRes.status).toBe(200);
+
+  // Step 2: Verify the session_id is persisted in DB (via GET)
+  const infoRes = await fetch(`${BASE}/api/agents/${agentId}`);
+  const info = await infoRes.json();
+  expect(info.last_session_id).toBe(fakeSessionId);
+
+  // Step 3: Trigger restoreFromDB via dedicated endpoint
+  const restoreRes = await fetch(`${BASE}/api/restore`, { method: 'POST' });
+  expect(restoreRes.status).toBe(200);
+
+  // Step 4: After restore, agent's config should include resumeSessionId
+  await sleep(300);
+  const afterRes = await fetch(`${BASE}/api/agents/${agentId}`);
+  const after = await afterRes.json();
+  expect(after.config.resumeSessionId).toBe(fakeSessionId);
+});
+
+// ── MC1-T1: GET /api/v2/agents — 标准格式响应 ────────────────────────────────
+test('MC1-T1: GET /api/v2/agents returns standard format {ok, data, error, ts}', async ({ request }) => {
+  const res = await request.get('/api/v2/agents');
+  expect(res.status()).toBe(200);
+  const body = await res.json();
+  expect(body).toHaveProperty('ok', true);
+  expect(Array.isArray(body.data)).toBe(true);
+  expect(body.error).toBeNull();
+  expect(typeof body.ts).toBe('number');
+});
+
+// ── MC1-T2: GET /api/v2/agents/:id — 标准格式响应 ───────────────────────────
+test('MC1-T2: GET /api/v2/agents/:id returns standard format', async ({ request }) => {
+  // Create an agent first
+  const createRes = await request.post('/api/agents', {
+    data: { name: 'V2Worker', type: 'worker', adapterType: 'mock' },
+  });
+  const agent = await createRes.json();
+
+  const res = await request.get(`/api/v2/agents/${agent.id}`);
+  expect(res.status()).toBe(200);
+  const body = await res.json();
+  expect(body).toHaveProperty('ok', true);
+  expect(body.data).toHaveProperty('id', agent.id);
+  expect(body.data).toHaveProperty('name', 'V2Worker');
+  expect(body.error).toBeNull();
+  expect(typeof body.ts).toBe('number');
+});
+
+// ── MC1-T3: GET /api/v2/agents/:id/history — 支持 since_ts 过滤 ──────────────
+test('MC1-T3: GET /api/v2/agents/:id/history returns history with since_ts filter', async () => {
+  const agentId = await createAgent({ name: 'HistoryV2' });
+  const ws = await wsConnect(agentId);
+  await nextMsg(ws, 5000);
+
+  // Send input to generate output
+  ws.send(JSON.stringify({ type: 'input', data: 'V2_HISTORY_TEST\n' }));
+  await sleep(300);
+
+  const tsBefore = Date.now();
+
+  ws.send(JSON.stringify({ type: 'input', data: 'AFTER_TS\n' }));
+  await sleep(300);
+  ws.close();
+
+  // Without since_ts — should return all history
+  const res1 = await fetch(`${BASE}/api/v2/agents/${agentId}/history`);
+  expect(res1.status).toBe(200);
+  const body1 = await res1.json();
+  expect(body1).toHaveProperty('ok', true);
+  expect(Array.isArray(body1.data.chunks)).toBe(true);
+  expect(body1.data.chunks.length).toBeGreaterThan(0);
+  expect(body1.data.chunks.join('')).toContain('V2_HISTORY_TEST');
+  expect(typeof body1.ts).toBe('number');
+
+  // With since_ts — should only return records after tsBefore
+  const res2 = await fetch(`${BASE}/api/v2/agents/${agentId}/history?since_ts=${tsBefore}`);
+  expect(res2.status).toBe(200);
+  const body2 = await res2.json();
+  expect(body2).toHaveProperty('ok', true);
+  expect(Array.isArray(body2.data.chunks)).toBe(true);
+  // Records after tsBefore should contain AFTER_TS but not necessarily V2_HISTORY_TEST
+  const text = body2.data.chunks.join('');
+  expect(text).toContain('AFTER_TS');
+});
+
+// ── MC1-T4: POST /api/v2/agents/:id/input — 发送文字输入 ─────────────────────
+test('MC1-T4: POST /api/v2/agents/:id/input sends text input to agent', async () => {
+  const agentId = await createAgent({ name: 'InputV2' });
+  const ws = await wsConnect(agentId);
+  await nextMsg(ws, 5000);
+
+  const outputs = [];
+  ws.on('message', d => { try { const m = JSON.parse(d); if (m.type === 'output') outputs.push(m.data); } catch {} });
+
+  // Send input via v2 REST API
+  const res = await fetch(`${BASE}/api/v2/agents/${agentId}/input`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text: 'V2_INPUT_TEST\n' }),
+  });
+  expect(res.status).toBe(200);
+  const body = await res.json();
+  expect(body).toHaveProperty('ok', true);
+  expect(body.error).toBeNull();
+
+  // Wait for echo from mock adapter
+  for (let i = 0; i < 20; i++) {
+    await sleep(100);
+    if (outputs.join('').includes('V2_INPUT_TEST')) break;
+  }
+  expect(outputs.join('')).toContain('V2_INPUT_TEST');
+  ws.close();
+});
+
+// ── MC1-T5: 不存在的 agent 返回标准错误格式 ──────────────────────────────────
+test('MC1-T5: non-existent agent returns standard error format {ok:false, error}', async ({ request }) => {
+  const fakeId = 'non-existent-agent-id-12345';
+
+  // GET /api/v2/agents/:id — not found
+  const res1 = await request.get(`/api/v2/agents/${fakeId}`);
+  expect(res1.status()).toBe(404);
+  const body1 = await res1.json();
+  expect(body1).toHaveProperty('ok', false);
+  expect(body1.data).toBeNull();
+  expect(typeof body1.error).toBe('string');
+  expect(body1.error.length).toBeGreaterThan(0);
+  expect(typeof body1.ts).toBe('number');
+
+  // POST /api/v2/agents/:id/input — not found
+  const res2 = await request.post(`/api/v2/agents/${fakeId}/input`, {
+    data: { text: 'hello' },
+  });
+  expect(res2.status()).toBe(404);
+  const body2 = await res2.json();
+  expect(body2).toHaveProperty('ok', false);
+  expect(body2.data).toBeNull();
+  expect(typeof body2.error).toBe('string');
+});
+
+// ── MC8-T1: GET /api/v2/agents/:id/diff — git repo 返回 diff 文本 ────────────
+test('MC8-T1: GET /api/v2/agents/:id/diff returns standard format with diff string', async () => {
+  // 在 git repo 目录下创建 agent
+  const agentId = await createAgent({
+    name: 'DiffGitAgent',
+    adapterType: 'mock',
+    config: { cwd: '/home/yinrong/dev/ai/claude-server' },
+  });
+
+  const res = await fetch(`${BASE}/api/v2/agents/${agentId}/diff`);
+  expect(res.status).toBe(200);
+  const body = await res.json();
+  expect(body).toHaveProperty('ok', true);
+  expect(body.data).toHaveProperty('diff');
+  expect(typeof body.data.diff).toBe('string');
+  expect(body.error).toBeNull();
+  expect(typeof body.ts).toBe('number');
+});
+
+// ── MC8-T2: GET /api/v2/agents/:id/diff — 非 git repo 返回空字符串 ───────────
+test('MC8-T2: GET /api/v2/agents/:id/diff returns empty string for non-git cwd', async () => {
+  const agentId = await createAgent({
+    name: 'DiffNoGitAgent',
+    adapterType: 'mock',
+    config: { cwd: '/tmp' },
+  });
+
+  const res = await fetch(`${BASE}/api/v2/agents/${agentId}/diff`);
+  expect(res.status).toBe(200);
+  const body = await res.json();
+  expect(body).toHaveProperty('ok', true);
+  expect(body.data).toHaveProperty('diff', '');
+  expect(body.error).toBeNull();
+});
+
+// ── T30: MS1 frontend — modal-model select is populated when modal opens ──────
+test('T30: new-agent modal shows model select with options after refresh', async ({ page }) => {
+  // Seed models first
+  await fetch(`${BASE}/api/models/refresh`, { method: 'POST' });
+
+  await page.goto(`${BASE}/`);
+  // Open new agent modal
+  await page.click('#btn-new-agent');
+  // modal-model select should be visible
+  const select = page.locator('#modal-model');
+  await select.waitFor({ state: 'visible', timeout: 5000 });
+  // Should have at least one option (from the seeded models)
+  const count = await select.locator('option').count();
+  expect(count).toBeGreaterThan(0);
+  // At least one option should contain a model name
+  const firstText = await select.locator('option').first().textContent();
+  expect(firstText.length).toBeGreaterThan(0);
+});
+
+// ── T31: MS1 frontend — selecting model stores it in agent config ─────────────
+test('T31: creating agent via modal with selected model stores config.model', async ({ page }) => {
+  // Seed models
+  const refreshRes = await fetch(`${BASE}/api/models/refresh`, { method: 'POST' });
+  const { models } = await refreshRes.json();
+  const targetModel = models[0].name;
+
+  await page.goto(`${BASE}/`);
+  // Open modal
+  await page.click('#btn-new-agent');
+  const select = page.locator('#modal-model');
+  await select.waitFor({ state: 'visible', timeout: 5000 });
+
+  // Fill in agent name
+  await page.fill('#modal-name', 'ModelTestAgent');
+
+  // Select the target model
+  await select.selectOption(targetModel);
+
+  // Confirm creation
+  await page.click('#modal-confirm');
+  await sleep(500);
+
+  // Find the newly created agent via API
+  const listRes = await fetch(`${BASE}/api/agents`);
+  const agents = await listRes.json();
+  const agent = agents.find(a => a.name === 'ModelTestAgent');
+  expect(agent).toBeDefined();
+
+  const infoRes = await fetch(`${BASE}/api/agents/${agent.id}`);
+  const info = await infoRes.json();
+  expect(info.config).toHaveProperty('model', targetModel);
+});
+
+// ── PV1: POST /api/providers creates provider, GET lists with masked token ─
+test('PV1: create provider and list with masked auth_token', async ({ request }) => {
+  const uniqueName = `test-provider-pv1-${Date.now()}`;
+  const createRes = await request.post('/api/providers', {
+    data: {
+      name: uniqueName,
+      base_url: 'https://api.example.com',
+      auth_token: 'secret-token-123',
+    },
+  });
+  expect(createRes.status()).toBe(201);
+  const created = await createRes.json();
+  expect(created).toHaveProperty('id');
+  expect(created.name).toBe(uniqueName);
+
+  // GET list — auth_token must be masked
+  const listRes = await request.get('/api/providers');
+  expect(listRes.status()).toBe(200);
+  const providers = await listRes.json();
+  const found = providers.find(p => p.name === uniqueName);
+  expect(found).toBeDefined();
+  expect(found.auth_token).toBe('***');
+  expect(found.base_url).toBe('https://api.example.com');
+});
+
+// ── PV2: POST /api/providers/:id/set-default switches default provider ─────
+test('PV2: set-default switches default provider', async ({ request }) => {
+  const ts = Date.now();
+  // Create two providers
+  const r1 = await request.post('/api/providers', {
+    data: { name: `pv2-provider-a-${ts}`, base_url: 'https://a.example.com', auth_token: 'tok-a' },
+  });
+  const p1 = await r1.json();
+
+  const r2 = await request.post('/api/providers', {
+    data: { name: `pv2-provider-b-${ts}`, base_url: 'https://b.example.com', auth_token: 'tok-b' },
+  });
+  const p2 = await r2.json();
+
+  // Set p2 as default
+  const setRes = await request.post(`/api/providers/${p2.id}/set-default`);
+  expect(setRes.status()).toBe(200);
+  const setBody = await setRes.json();
+  expect(setBody.ok).toBe(true);
+
+  // Check p2 is default, p1 is not
+  const listRes = await request.get('/api/providers');
+  const providers = await listRes.json();
+  const pa = providers.find(p => p.id === p1.id);
+  const pb = providers.find(p => p.id === p2.id);
+  expect(pb.is_default).toBe(1);
+  expect(pa.is_default).toBe(0);
+});
+
+// ── PV3: POST /api/agents with providerId stores it in config ──────────────
+test('PV3: create agent with providerId stores it in config', async ({ request }) => {
+  // First create a provider
+  const provRes = await request.post('/api/providers', {
+    data: { name: `pv3-provider-${Date.now()}`, base_url: 'https://pv3.example.com', auth_token: 'tok-pv3' },
+  });
+  const provider = await provRes.json();
+
+  // Create agent with providerId
+  const agentRes = await request.post('/api/agents', {
+    data: {
+      name: 'PV3Agent',
+      type: 'worker',
+      adapterType: 'mock',
+      providerId: provider.id,
+    },
+  });
+  expect(agentRes.status()).toBe(201);
+  const agent = await agentRes.json();
+
+  // Fetch agent — config.providerId must match
+  const infoRes = await request.get(`/api/agents/${agent.id}`);
+  expect(infoRes.status()).toBe(200);
+  const info = await infoRes.json();
+  expect(info.config).toHaveProperty('providerId', provider.id);
+});
+
+// ── PV4: DELETE /api/providers/:id with agent reference returns 400 ────────
+test('PV4: delete provider with agent reference returns 400', async ({ request }) => {
+  // Create a provider
+  const provRes = await request.post('/api/providers', {
+    data: { name: `pv4-provider-${Date.now()}`, base_url: 'https://pv4.example.com', auth_token: 'tok-pv4' },
+  });
+  const provider = await provRes.json();
+
+  // Create agent referencing that provider
+  await request.post('/api/agents', {
+    data: {
+      name: 'PV4Agent',
+      type: 'worker',
+      adapterType: 'mock',
+      providerId: provider.id,
+    },
+  });
+
+  // Attempt to delete provider — should fail with 400
+  const delRes = await request.delete(`/api/providers/${provider.id}`);
+  expect(delRes.status()).toBe(400);
+  const body = await delRes.json();
+  expect(body).toHaveProperty('error');
+});
+
+// ── PV5: GET /api/v2/providers returns standard format ────────────────────
+test('PV5: GET /api/v2/providers returns standard format {ok:true, data:[...]}', async ({ request }) => {
+  const res = await request.get('/api/v2/providers');
+  expect(res.status()).toBe(200);
+  const body = await res.json();
+  expect(body).toHaveProperty('ok', true);
+  expect(Array.isArray(body.data)).toBe(true);
+  expect(body.error).toBeNull();
+  expect(typeof body.ts).toBe('number');
+});

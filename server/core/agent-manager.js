@@ -7,6 +7,8 @@ import {
   getAllMemory, upsertMemoryItem, countMemoryUpdatedSince,
   appendOutput, getRecentOutput,
   recordCommand,
+  setAgentSessionId,
+  getProvider, getDefaultProvider,
 } from '../store/db.js';
 import { MockAdapter } from './adapter/mock.js';
 import { ClaudeCodeAdapter } from './adapter/claude-code.js';
@@ -21,11 +23,14 @@ class AgentManager extends EventEmitter {
 
   // ── Public API ─────────────────────────────────────────────────────────────
 
-  createAgent({ name, type = 'worker', adapterType = 'claude-code', config = {} }) {
+  createAgent({ name, type = 'worker', adapterType = 'claude-code', config = {}, providerId }) {
     const finalConfig = { cwd: process.cwd(), ...config };
+    if (providerId) finalConfig.providerId = providerId;
     mkdirSync(finalConfig.cwd, { recursive: true });
     const id = saveAgent({ name, type, adapterType, config: finalConfig });
-    const adapter = this._makeAdapter(adapterType, finalConfig);
+    const providerEnv = this._resolveProviderEnv(finalConfig);
+    const adapterConfig = { ...finalConfig, _providerEnv: providerEnv };
+    const adapter = this._makeAdapter(adapterType, adapterConfig);
     const session = { config: getAgent(id), adapter, subscribers: new Set() };
     this._sessions.set(id, session);
     this._wireAdapter(id, adapter);
@@ -171,14 +176,26 @@ class AgentManager extends EventEmitter {
     }
   }
 
-  // Restore persisted agents on startup
+  // Restore persisted agents on startup (also updates config for existing sessions)
   restoreFromDB() {
     for (const agent of getAllAgents()) {
+      // Build config with resumeSessionId if last_session_id is set
+      let config = agent.config;
+      if (agent.last_session_id && config.resumeSessionId !== agent.last_session_id) {
+        config = { ...agent.config, resumeSessionId: agent.last_session_id };
+        // Persist the resumeSessionId into DB config so GET /api/agents/:id reflects it
+        setAgentConfig(agent.id, config);
+      }
+
       if (!this._sessions.has(agent.id)) {
-        const adapter = this._makeAdapter(agent.adapter_type, agent.config);
-        const session = { config: agent, adapter, subscribers: new Set() };
+        const adapter = this._makeAdapter(agent.adapter_type, config);
+        const session = { config: { ...agent, config }, adapter, subscribers: new Set() };
         this._sessions.set(agent.id, session);
         this._wireAdapter(agent.id, adapter);
+      } else {
+        // Update existing session's config reference so GET /api/agents/:id returns fresh config
+        const session = this._sessions.get(agent.id);
+        if (session) session.config = { ...agent, config };
       }
     }
   }
@@ -309,6 +326,27 @@ Excerpt: ${text.slice(-1500)}`;
     for (const ws of session.subscribers) {
       if (ws.readyState === 1) ws.send(json);
     }
+  }
+
+  _resolveProviderEnv(config) {
+    const providerId = config?.providerId;
+    let provider = null;
+    if (providerId) {
+      provider = getProvider(providerId);
+    }
+    if (!provider) {
+      provider = getDefaultProvider();
+    }
+    if (!provider) return {};
+
+    const baseUrl = provider.use_model_proxy
+      ? 'http://127.0.0.1:4290/anthropic'
+      : provider.base_url;
+
+    return {
+      ANTHROPIC_AUTH_TOKEN: provider.auth_token,
+      ANTHROPIC_BASE_URL: baseUrl,
+    };
   }
 
   _makeAdapter(adapterType, config) {

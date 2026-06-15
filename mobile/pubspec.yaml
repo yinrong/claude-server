@@ -1,0 +1,34 @@
+name: claude_mobile
+description: Claude Server 手机客户端 - 监督和控制 AI Agent 工作
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # 状态管理
+  provider: ^6.1.2
+
+  # HTTP 客户端
+  http: ^1.2.1
+
+  # WebSocket
+  web_socket_channel: ^3.0.1
+
+  # 本地配置持久化
+  shared_preferences: ^2.2.3
+
+  # 图标
+  cupertino_icons: ^1.0.6
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+
+flutter:
+  uses-material-design: true

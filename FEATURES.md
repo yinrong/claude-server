@@ -56,12 +56,6 @@
 
 | # | 功能 | 说明 | 状态 | 测试 |
 |---|------|------|------|------|
-| U5 | 手机键盘输入 | 自定义聊天 UI，不依赖 xterm，原生 textarea 输入 | 🔲 重构中 | — |
-| U15 | 虚拟按键栏 | 仅保留 claude-code 交互需要的按键(Tab/Esc/↑↓等) | 🔲 重构中 | — |
-| U16 | 方案A: 自定义聊天UI | stream-json API 驱动，自己渲染消息气泡+工具调用 | 🔲 | — |
-| U17 | 离线输入 | 网络断开时可输入/编辑，重连后自动发送 | 🔲 | — |
-| U18 | 多轮对话(自管理) | 服务端维护历史，每轮传完整 history，--no-session-persistence | 🔲 | — |
-| U19 | 自实现 Compact | 历史超长时自动摘要压缩，替代 /compact | 🔲 | — |
 | U6 | UI 与网络解耦 | 消息队列缓冲，WS 断开不丢输入，重连自动 flush | ✅ | mobile:queue |
 
 ### 2.3 侧栏与导航
@@ -111,7 +105,79 @@
 
 ---
 
-## 5. 基础设施
+## 5. 服务端增强
+
+### 5.1 对话状态恢复
+
+详细设计：[docs/design/session-restore.md](docs/design/session-restore.md)
+
+| # | 功能 | 说明 | 状态 | 测试 |
+|---|------|------|------|------|
+| SR1 | 重启后自动恢复 PTY session | DB 存 last_session_id，重启用 --resume 恢复 | ✅ | T28,T29 |
+
+### 5.2 模型选择
+
+详细设计：[docs/design/model-selection.md](docs/design/model-selection.md)
+
+| # | 功能 | 说明 | 状态 | 测试 |
+|---|------|------|------|------|
+| MS1 | Agent 创建时选择模型 | config.model 传给 --model 参数；前端弹窗加下拉框 | ✅ | MS1,T30,T31 |
+| MS2 | 模型列表 + 手动刷新 | GET /api/models + POST /api/models/refresh；前端刷新按钮 | ✅ | MS2a,MS2b,MS2c,T30 |
+
+---
+
+## 6. Flutter 手机客户端
+
+详细设计：[docs/design/mobile-client.md](docs/design/mobile-client.md)
+
+### 6.1 统一接口层
+
+| # | 功能 | 说明 | 状态 | 测试 |
+|---|------|------|------|------|
+| MC1 | /api/v2 统一接口层 | 标准化响应格式 + since_ts 增量查询 | ✅ | MC1-T1~T5 |
+
+### 6.2 Flutter App
+
+| # | 功能 | 说明 | 状态 | 测试 |
+|---|------|------|------|------|
+| MC2 | Flutter App 基础框架 | Android/iOS，WS 客户端 | ✅ | unit_test,widget_test |
+| MC3 | WS 长连接保活 | 30s 心跳 + 指数退避重连 + 首次省电引导弹窗 | ✅ | ws_client_test |
+| MC4 | Agent 列表 + 实时状态 | ⏳/●/○ 状态，多设备同时连接 | ✅ | agents_provider_test |
+| MC5 | 快速回复 | 直接向 Agent 发送文字指令 | ✅ | agent_detail_provider_test |
+| MC6 | 对话历史查看 | 查看完整对话记录 | ✅ | history_test |
+| MC7 | 文件浏览 | 浏览 Agent 工作目录 | ✅ | file_browser_test |
+| MC8 | Diff / 代码变更查看 | 查看 Agent 做的代码变更 | ✅ | MC8-T1,MC8-T2,diff_viewer_test |
+
+---
+
+## 7. ai-hub 整合
+
+### 7.1 router 组件（原 llm-router/x）
+
+详细设计：[docs/design/ai-hub-architecture.md](docs/design/ai-hub-architecture.md)
+
+| # | 功能 | 说明 | 状态 | 测试 |
+|---|------|------|------|------|
+| R1 | router 进程启动 | PM2 管理，GET /healthz 返回 200 | ✅ | pytest:healthz |
+| R2 | router 现有 E2E 通过 | 迁入后原有 55 个 E2E pytest 测试通过（原版一致） | ✅ | pytest:all |
+
+### 7.2 llm 组件（原 llm-api）
+
+| # | 功能 | 说明 | 状态 | 测试 |
+|---|------|------|------|------|
+| LM1 | llm 模块可 import | `from llm import get_llm` 正常工作 | ✅ | pytest:import |
+| LM2 | llm 配置从环境变量读取 | 不硬编码地址和 key | ✅ | test_conf:lm2 |
+| LM3 | 多 provider 切换 | `get_llm(provider='openai'/'anthropic')` | ✅ | test_conf:lm3 |
+
+### 7.3 tunnel 组件（原 llm-router/c）
+
+| # | 功能 | 说明 | 状态 | 测试 |
+|---|------|------|------|------|
+| TN1 | tunnel 独立安装包 | pip install 后可运行 `python -m tunnel` | ✅ | test_package |
+
+---
+
+## 8. 基础设施
 
 | # | 功能 | 说明 | 状态 | 测试 |
 |---|------|------|------|------|
@@ -123,7 +189,7 @@
 
 ---
 
-## 6. 测试要求
+## 8. 测试要求
 
 | # | 要求 | 说明 | 状态 |
 |---|------|------|------|
@@ -134,41 +200,27 @@
 
 ---
 
-## 7. Roadmap
+## 9. Roadmap
 
-### Phase 1 — 紧急修复（当前）
-| 顺序 | 目标 | 涉及功能 |
-|------|------|---------|
-| 1 | 修复手机键盘输入 | U5, BUG1 |
-| 2 | UI 与网络解耦 | U6, U10, BUG3 |
-| 3 | 手机 UI 回归测试 | T-R2 |
+### 已完成
+所有 server/Flutter 核心功能已实现，见上方各表。
 
-### Phase 2 — 核心体验补全
-| 顺序 | 目标 | 涉及功能 |
-|------|------|---------|
-| 4 | Worker 历史浏览 | U3 |
-| 5 | 文件浏览与阅读 | U13, U14 |
-| 6 | 切换工作目录 + 记忆常用命令 | C10, C11 |
-
-### Phase 3 — 中间层 & Master 控制
-| 顺序 | 目标 | 涉及功能 |
-|------|------|---------|
-| 7 | 中间层架构实现 | C1 |
-| 8 | Master 感知 Hub Agents | C2, C3 |
-| 9 | @dispatch 自动路由 | C4 |
-| 10 | 跨 Agent 对话分析 + 记忆提取 | M3 |
-
-### Phase 4 — 移动客户端 & 接口层
-| 顺序 | 目标 | 设计文档 |
-|------|------|---------|
-| 11 | 手机本地客户端 | [docs/design/mobile-client.md](docs/design/mobile-client.md) |
-| 12 | 统一接口层 (/api/v2) | [docs/design/mobile-client.md](docs/design/mobile-client.md) |
-| 13 | 版本更新后恢复对话状态 | [docs/design/session-restore.md](docs/design/session-restore.md) |
-| 14 | 选择模型名称 | [docs/design/model-selection.md](docs/design/model-selection.md) |
+### 待完成
+| 功能 | 说明 |
+|------|------|
+| MS1 | 前端 Agent 弹窗加模型下拉框 |
+| MS2 | 前端加模型列表刷新按钮 |
+| LM2 | llm 配置从环境变量读取（见 [ai-hub-architecture.md](docs/design/ai-hub-architecture.md)） |
+| LM3 | llm 多 provider 切换 |
+| TN1 | tunnel 独立安装包 |
+| PV1~PV5 | server 多 Provider 支持（见 [multi-provider.md](docs/design/multi-provider.md)） | ✅ | PV1~PV5 |
+| AU1~AU4 | 多用户认证（见 [ai-hub-architecture.md](docs/design/ai-hub-architecture.md)） |
 
 ---
 
-## 8. 已知 Bug
+## 10. 已知 Bug
+
+
 
 | # | 问题 | 原因 | 优先级 | 回归测试 |
 |---|------|------|--------|---------|
