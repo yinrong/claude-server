@@ -323,6 +323,10 @@ export function getAllModels() {
   return selectAllModels.all();
 }
 
+export function clearModels() {
+  db.prepare('DELETE FROM models').run();
+}
+
 // ── Providers ─────────────────────────────────────────────────────────────
 
 const insertProvider = db.prepare(

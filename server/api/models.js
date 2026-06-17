@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { upsertModels, getAllModels } from '../store/db.js';
+import { upsertModels, getAllModels, clearModels } from '../store/db.js';
 
 const router = Router();
 
@@ -8,9 +8,9 @@ const router = Router();
  * or ANTHROPIC_BASE_URL is not set).
  */
 const DEFAULT_MODELS = [
-  { name: 'claude-opus-4-8',    display_name: 'Claude Opus 4 (Extended)' },
-  { name: 'claude-sonnet-4-6',  display_name: 'Claude Sonnet 4 (1M)' },
-  { name: 'claude-haiku-4-5',   display_name: 'Claude Haiku 4' },
+  { name: 'anthropic/claude-opus-4-8',   display_name: 'Claude Opus 4 (Extended)' },
+  { name: 'anthropic/claude-sonnet-4-6', display_name: 'Claude Sonnet 4 (1M)' },
+  { name: 'anthropic/claude-haiku-4-5',  display_name: 'Claude Haiku 4' },
 ];
 
 /**
@@ -22,10 +22,13 @@ async function fetchModelsFromProxy() {
   if (!baseUrl) return DEFAULT_MODELS;
 
   try {
-    const url = `${baseUrl.replace(/\/$/, '')}/v1/models`;
+    // Strip /anthropic suffix if present — models endpoint is at /v1/models on the proxy root
+    const proxyRoot = baseUrl.replace(/\/anthropic\/?$/, '').replace(/\/$/, '');
+    const url = `${proxyRoot}/v1/models`;
     const res = await fetch(url, {
       headers: {
-        'x-api-key': process.env.ANTHROPIC_API_KEY ?? '',
+        'Authorization': `Bearer ${process.env.ANTHROPIC_AUTH_TOKEN ?? process.env.ANTHROPIC_API_KEY ?? ''}`,
+        'x-api-key': process.env.ANTHROPIC_AUTH_TOKEN ?? process.env.ANTHROPIC_API_KEY ?? '',
         'anthropic-version': '2023-06-01',
       },
       signal: AbortSignal.timeout(5000),
@@ -34,9 +37,12 @@ async function fetchModelsFromProxy() {
     const body = await res.json();
     // OpenAI-compatible format: { data: [{ id, ... }] }
     const data = Array.isArray(body.data) ? body.data : [];
-    const claudeModels = data.filter(m => m.id?.startsWith('claude'));
-    if (claudeModels.length === 0) return DEFAULT_MODELS;
-    return claudeModels.map(m => ({ name: m.id, display_name: m.id }));
+    const llmModels = data.filter(m => !m.model_type || m.model_type === 'llm');
+    if (llmModels.length === 0) return DEFAULT_MODELS;
+    return llmModels.map(m => {
+      const name = m.owned_by ? `${m.owned_by}/${m.id}` : m.id;
+      return { name, display_name: name };
+    });
   } catch {
     return DEFAULT_MODELS;
   }
@@ -52,6 +58,7 @@ router.get('/', (_req, res) => {
 router.post('/refresh', async (_req, res) => {
   try {
     const models = await fetchModelsFromProxy();
+    clearModels();
     upsertModels(models);
     const saved = getAllModels();
     res.json({ ok: true, models: saved });

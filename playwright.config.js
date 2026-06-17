@@ -1,6 +1,6 @@
 import { defineConfig } from '@playwright/test';
 
-const PORT = 37890;
+const PORT = parseInt(process.env.PORT ?? '37890');
 
 export default defineConfig({
   testDir: './tests',
@@ -11,7 +11,7 @@ export default defineConfig({
   },
   webServer: {
     // Use a separate test DB so tests don't pollute production data
-    command: `PORT=${PORT} DB_PATH=./data/test.db node server/index.js`,
+    command: `PORT=${PORT} DB_PATH=./data/test.db ANTHROPIC_BASE_URL=http://127.0.0.1:4290/anthropic ANTHROPIC_AUTH_TOKEN=${process.env.ANTHROPIC_AUTH_TOKEN ?? ''} node server/index.js`,
     url: `http://localhost:${PORT}`,
     reuseExistingServer: false,
     timeout: 25000,

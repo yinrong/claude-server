@@ -3,7 +3,7 @@
 > 本文件是项目功能的 single source of truth。每次需求变动必须同步更新。
 > 每个功能都必须有对应的 E2E 回归测试。
 
-状态：✅ 测试通过 | ⚠️ 已实现未测试 | ❌ 失效/Bug | 🔲 未实现
+状态：✅ 测试通过 | 🔄 开发中 | ⚠️ 已实现未测试 | ❌ 失效/Bug | 🔲 未实现
 
 ---
 
@@ -123,6 +123,7 @@
 |---|------|------|------|------|
 | MS1 | Agent 创建时选择模型 | config.model 传给 --model 参数；前端弹窗加下拉框 | ✅ | MS1,T30,T31 |
 | MS2 | 模型列表 + 手动刷新 | GET /api/models + POST /api/models/refresh；前端刷新按钮 | ✅ | MS2a,MS2b,MS2c,T30 |
+| MS3 | 从 proxy 动态拉取全部可用模型，名称含 provider 前缀 | refresh 返回所有 LLM 模型，名称格式为 {owned_by}/{id} | ✅ | MS3,MS2b,MS2c |
 
 ---
 
@@ -140,13 +141,13 @@
 
 | # | 功能 | 说明 | 状态 | 测试 |
 |---|------|------|------|------|
-| MC2 | Flutter App 基础框架 | Android/iOS，WS 客户端 | ✅ | unit_test,widget_test |
-| MC3 | WS 长连接保活 | 30s 心跳 + 指数退避重连 + 首次省电引导弹窗 | ✅ | ws_client_test |
-| MC4 | Agent 列表 + 实时状态 | ⏳/●/○ 状态，多设备同时连接 | ✅ | agents_provider_test |
-| MC5 | 快速回复 | 直接向 Agent 发送文字指令 | ✅ | agent_detail_provider_test |
-| MC6 | 对话历史查看 | 查看完整对话记录 | ✅ | history_test |
-| MC7 | 文件浏览 | 浏览 Agent 工作目录 | ✅ | file_browser_test |
-| MC8 | Diff / 代码变更查看 | 查看 Agent 做的代码变更 | ✅ | MC8-T1,MC8-T2,diff_viewer_test |
+| MC2 | Flutter App 基础框架 | Android/iOS，WS 客户端 | ⚠️ | 缺 integration_test |
+| MC3 | WS 长连接保活 | 30s 心跳 + 指数退避重连 + 首次省电引导弹窗 | ⚠️ | 缺 integration_test |
+| MC4 | Agent 列表 + 实时状态 | ⏳/●/○ 状态，多设备同时连接 | ⚠️ | 缺 integration_test |
+| MC5 | 快速回复 | 直接向 Agent 发送文字指令 | ⚠️ | 缺 integration_test |
+| MC6 | 对话历史查看 | 查看完整对话记录 | ⚠️ | 缺 integration_test |
+| MC7 | 文件浏览 | 浏览 Agent 工作目录 | ⚠️ | 缺 integration_test |
+| MC8 | Diff / 代码变更查看 | 查看 Agent 做的代码变更 | ⚠️ | MC8-T1,MC8-T2（服务端），缺 Flutter integration_test |
 
 ---
 
@@ -189,7 +190,7 @@
 
 ---
 
-## 8. 测试要求
+## 9. 测试要求
 
 | # | 要求 | 说明 | 状态 |
 |---|------|------|------|
@@ -200,7 +201,7 @@
 
 ---
 
-## 9. Roadmap
+## 10. Roadmap
 
 ### 已完成
 所有 server/Flutter 核心功能已实现，见上方各表。
@@ -208,13 +209,8 @@
 ### 待完成
 | 功能 | 说明 |
 |------|------|
-| MS1 | 前端 Agent 弹窗加模型下拉框 |
-| MS2 | 前端加模型列表刷新按钮 |
-| LM2 | llm 配置从环境变量读取（见 [ai-hub-architecture.md](docs/design/ai-hub-architecture.md)） |
-| LM3 | llm 多 provider 切换 |
-| TN1 | tunnel 独立安装包 |
-| PV1~PV5 | server 多 Provider 支持（见 [multi-provider.md](docs/design/multi-provider.md)） | ✅ | PV1~PV5 |
 | AU1~AU4 | 多用户认证（见 [ai-hub-architecture.md](docs/design/ai-hub-architecture.md)） |
+| MC2~MC8 | Flutter App 功能缺少 integration_test（当前测试均为 Dart 单元测试，不符合规范） |
 
 ---
 
@@ -229,3 +225,4 @@
 | ~~BUG3~~ | ~~网络卡顿时 UI 操作卡死 (U6)~~ | ~~已修复: sendQueue + flush~~ | — | ✅ mobile:queue |
 | ~~BUG4~~ | ~~切换 Agent 后对话历史丢失~~ | ~~已修复: _handleEvent 里提前存 history~~ | — | ✅ chat-smoke:BUG4 |
 | ~~BUG5~~ | ~~E2E 测试全用 mock 未检测到 claude binary 损坏~~ | ~~已修复: T26 调用真实 claude~~ | — | ✅ T26 |
+| ~~BUG6~~ | ~~模型列表缺少 provider 前缀：`pa/claude-sonnet-4-6` 应为 `ppio/pa/claude-sonnet-4-6`~~ | ~~已修复: `fetchModelsFromProxy` 改为始终用 `owned_by/id`~~ | — | ✅ BUG6 |

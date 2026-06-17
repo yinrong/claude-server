@@ -570,19 +570,50 @@ test('MS2b: GET /api/models returns model list from DB', async ({ request }) => 
   expect(Array.isArray(models)).toBe(true);
   expect(models.length).toBeGreaterThan(0);
 
-  // Should include expected default models
+  // All model names should have provider/id format
   const names = models.map(m => m.name);
-  expect(names).toContain('claude-sonnet-4-6');
+  const allHaveSlash = names.every(n => n.includes('/'));
+  expect(allHaveSlash).toBe(true);
 });
 
 // ── MS2c: Default model list contains expected models ────────────────────
-test('MS2c: default model list includes claude-opus-4-8 and claude-haiku-4-5', async ({ request }) => {
+test('MS2c: default model list includes claude models with provider prefix', async ({ request }) => {
   await request.post('/api/models/refresh');
   const res = await request.get('/api/models');
   const models = await res.json();
   const names = models.map(m => m.name);
-  expect(names).toContain('claude-opus-4-8');
-  expect(names).toContain('claude-haiku-4-5');
+  // Models should have provider/id format (e.g. pa/claude-opus-4-8 or anthropic/claude-opus-4-8)
+  const hasClaudeWithSlash = names.some(n => n.includes('/') && n.toLowerCase().includes('claude'));
+  expect(hasClaudeWithSlash).toBe(true);
+});
+
+// ── BUG6: Model names must be owned_by/id (full provider prefix) ─────────────
+// Regression: fetchModelsFromProxy used m.id directly when id already contained '/',
+// dropping owned_by. For any model where owned_by is set, name must equal owned_by/id.
+test('BUG6: model names after refresh equal owned_by/id for all upstream models', async ({ request }) => {
+  // Fetch raw model list directly from the same proxy the server uses
+  const proxyUrl = 'http://127.0.0.1:4290/v1/models';
+  const token = process.env.ANTHROPIC_AUTH_TOKEN ?? '';
+  const rawRes = await fetch(proxyUrl, {
+    headers: { 'Authorization': `Bearer ${token}`, 'x-api-key': token },
+    signal: AbortSignal.timeout(5000),
+  });
+  expect(rawRes.ok).toBe(true);
+  const rawBody = await rawRes.json();
+  const rawModels = (rawBody.data ?? []).filter(m => !m.model_type || m.model_type === 'llm');
+
+  // Trigger refresh and get stored names
+  const refreshRes = await request.post('/api/models/refresh');
+  expect(refreshRes.status()).toBe(200);
+  const { models } = await refreshRes.json();
+  const storedNames = new Set(models.map(m => m.name));
+
+  // Every raw model with owned_by must be stored as owned_by/id
+  const violations = rawModels
+    .filter(m => m.owned_by)
+    .filter(m => !storedNames.has(`${m.owned_by}/${m.id}`));
+
+  expect(violations).toEqual([]);
 });
 
 // ── T28: Session restore — last_session_id persisted and used on restart ──────
@@ -973,4 +1004,20 @@ test('PV5: GET /api/v2/providers returns standard format {ok:true, data:[...]}',
   expect(Array.isArray(body.data)).toBe(true);
   expect(body.error).toBeNull();
   expect(typeof body.ts).toBe('number');
+});
+
+// ── MS3: models/refresh returns all models with provider/ prefix ──────────
+test('MS3: refresh returns all models with {provider}/{id} name format', async ({ request }) => {
+  const res = await request.post('/api/models/refresh');
+  expect(res.status()).toBe(200);
+  const body = await res.json();
+  expect(body.ok).toBe(true);
+  expect(Array.isArray(body.models)).toBe(true);
+  // All model names should contain a slash (provider/id format)
+  const names = body.models.map(m => m.name);
+  const allHaveSlash = names.every(n => n.includes('/'));
+  expect(allHaveSlash).toBe(true);
+  // In real env: should return many models (>10); in test env defaults used
+  // Just verify the format is correct for whatever is returned
+  expect(names.length).toBeGreaterThan(0);
 });

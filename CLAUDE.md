@@ -139,35 +139,16 @@ claude 自己管理对话历史和 session 持久化，服务端只负责 PTY I/
 
 **依赖关系**：`model-fix-proxy` 必须先于所有 server 启动（server 内的 claude PTY 进程通过 proxy 访问 API）。
 
-#### 首次部署 / 全量重建
+#### 所有部署操作统一用脚本
 
 ```bash
-pm2 delete all                    # ⚠️ 仅首次或确认可中断时
-pm2 start ecosystem.config.cjs   # 按顺序启动：proxy → prod → prev → dev
-pm2 save                          # 持久化进程列表
+./scripts/deploy.sh dev    # 日常开发，随时可用
+./scripts/deploy.sh prev   # ⚠️ 需用户明确说"部署到 prev"
+./scripts/deploy.sh prod   # ⚠️ 需用户明确说"部署到 prod"
+./scripts/deploy.sh all    # ⚠️ 首次部署 / 全量重建，会删除所有进程
 ```
 
-#### 日常开发：只更新 dev
-
-```bash
-pm2 restart claude-server-dev
-```
-
-#### 发布到 prod（需用户确认）
-
-```bash
-# 1. dev 验证通过后
-pm2 restart claude-server-prod    # ⚠️ 会中断正在运行的 Agent
-```
-
-#### 新增/修改环境变量后
-
-改 `ecosystem.config.cjs` 后，必须 delete + start 才能使新 env 生效（pm2 restart 不会重载 env）：
-
-```bash
-pm2 delete claude-server-dev && pm2 start ecosystem.config.cjs --only claude-server-dev
-# prod 同理，但需先确认
-```
+脚本内部统一用 `pm2 delete <name> + pm2 start ecosystem` 确保 env 正确加载（`pm2 restart` 不重载 env）。**禁止直接执行 pm2 命令操作 prev/prod**，一律通过脚本，且必须有用户明确指令才能执行。
 
 #### 常见错误
 

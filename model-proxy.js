@@ -28,11 +28,15 @@ const server = http.createServer((req, res) => {
     if (req.method === 'POST' && body) {
       try {
         const parsed = JSON.parse(body);
+        const originalModel = parsed.model;
         if (parsed.model && !parsed.model.startsWith(MODEL_PREFIX)) {
           parsed.model = MODEL_PREFIX + parsed.model;
           body = JSON.stringify(parsed);
         }
+        if (originalModel) console.log(`[proxy] ${req.method} ${req.url} model: ${originalModel} → ${parsed.model}`);
       } catch {}
+    } else {
+      console.log(`[proxy] ${req.method} ${req.url}`);
     }
 
     const url = new URL(req.url, UPSTREAM);
