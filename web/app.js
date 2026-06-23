@@ -95,6 +95,13 @@ function handleMsg(msg) {
       break;
     case 'status':
       loadAgents();
+      // PTY idle → auto-scan generated files for current agent
+      if (msg.waitingForInput && msg.agentId) {
+        triggerFileScan(msg.agentId);
+      }
+      break;
+    case 'file_created':
+      if (msg.files) renderGenPanel(msg.files);
       break;
   }
 }
@@ -133,6 +140,10 @@ function switchAgent(agentId, agentData) {
   agentBadge.className = `badge ${agentData?.type ?? 'worker'}`;
   if (!term) initTerminal(); else term.clear();
   connect(agentId);
+  // Reset generated files panel for new agent
+  genPanelList.innerHTML = '<div class="gf-empty">暂无生成文件</div>';
+  genFooter.classList.add('hidden');
+  triggerFileScan(agentId);
 }
 
 // ── Right-click context menu ─────────────────────────────────────────────────
@@ -441,6 +452,107 @@ async function loadFileContent(path) {
 btnDownload.addEventListener('click', () => {
   if (!currentFilePath) return;
   window.open(`/api/download?path=${encodeURIComponent(currentFilePath)}`, '_blank');
+});
+
+// ── Generated files panel ────────────────────────────────────────────────────
+const genPanel = document.getElementById('gen-panel');
+const genPanelList = document.getElementById('gen-panel-list');
+const genFooter = document.getElementById('gen-panel-footer');
+const genSelectedCount = document.getElementById('gen-selected-count');
+let genFiles = [];
+
+document.getElementById('btn-generated').addEventListener('click', () => {
+  genPanel.classList.toggle('hidden');
+  if (!genPanel.classList.contains('hidden') && currentAgentId) {
+    triggerFileScan(currentAgentId);
+  }
+});
+document.getElementById('gen-panel-close').addEventListener('click', () => genPanel.classList.add('hidden'));
+document.getElementById('gen-refresh').addEventListener('click', () => {
+  if (currentAgentId) triggerFileScan(currentAgentId);
+});
+
+async function triggerFileScan(agentId) {
+  try {
+    const res = await fetch(`/api/agents/${agentId}/files`);
+    if (!res.ok) return;
+    const { files } = await res.json();
+    genFiles = files ?? [];
+    renderGenPanel(genFiles);
+  } catch {}
+}
+
+function fmtSize(b) {
+  if (b < 1024) return b + ' B';
+  if (b < 1048576) return (b / 1024).toFixed(1) + ' KB';
+  return (b / 1048576).toFixed(1) + ' MB';
+}
+
+function fmtTime(ms) {
+  const d = new Date(ms);
+  return d.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+
+function renderGenPanel(files) {
+  genFiles = files;
+  genPanelList.innerHTML = '';
+  if (!files.length) {
+    genPanelList.innerHTML = '<div class="gf-empty">暂无生成文件</div>';
+    genFooter.classList.add('hidden');
+    return;
+  }
+  for (const f of files) {
+    const row = document.createElement('div');
+    row.className = 'gf-item';
+    row.dataset.path = f.path;
+    row.innerHTML = `
+      <input type="checkbox" data-path="${f.path}" />
+      <span class="gf-name" title="${f.path}">${f.name}</span>
+      <span class="gf-meta">${fmtSize(f.size)}<br/>${fmtTime(f.mtime)}</span>
+      <a class="gf-dl" href="${f.download_url}" download="${f.name}" title="下载">⬇</a>
+    `;
+    row.querySelector('input[type=checkbox]').addEventListener('change', updateGenFooter);
+    // Click on row (not checkbox/link) toggles checkbox
+    row.addEventListener('click', (e) => {
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'A') return;
+      const cb = row.querySelector('input[type=checkbox]');
+      cb.checked = !cb.checked;
+      updateGenFooter();
+    });
+    genPanelList.appendChild(row);
+  }
+  updateGenFooter();
+}
+
+function updateGenFooter() {
+  const checked = genPanelList.querySelectorAll('input[type=checkbox]:checked');
+  if (checked.length > 0) {
+    genFooter.classList.remove('hidden');
+    genSelectedCount.textContent = `已选 ${checked.length} 个`;
+  } else {
+    genFooter.classList.add('hidden');
+  }
+}
+
+document.getElementById('gen-zip-btn').addEventListener('click', async () => {
+  const checked = [...genPanelList.querySelectorAll('input[type=checkbox]:checked')];
+  if (!checked.length || !currentAgentId) return;
+  const paths = checked.map(cb => cb.dataset.path);
+  try {
+    const res = await fetch(`/api/agents/${currentAgentId}/zip`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ paths }),
+    });
+    if (!res.ok) { alert('打包失败'); return; }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'files.zip';
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch (e) { alert('打包失败: ' + e.message); }
 });
 
 // ── Init ──────────────────────────────────────────────────────────────────────

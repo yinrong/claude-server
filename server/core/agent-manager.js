@@ -319,6 +319,10 @@ Excerpt: ${text.slice(-1500)}`;
     }
   }
 
+  broadcastToAgent(agentId, msg) {
+    this._broadcast(agentId, msg);
+  }
+
   _broadcast(agentId, msg) {
     const session = this._sessions.get(agentId);
     if (!session) return;

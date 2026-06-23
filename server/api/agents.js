@@ -1,5 +1,8 @@
 import { Router } from 'express';
 import { hostname } from 'os';
+import { readdirSync, statSync, createReadStream } from 'fs';
+import { join, basename } from 'path';
+import { ZipArchive } from 'archiver';
 import { agentManager } from '../core/agent-manager.js';
 import { getAllMemory, getRecentOutput, countOutput, setAgentSessionId } from '../store/db.js';
 
@@ -116,6 +119,63 @@ router.get('/:id/workspace', (req, res) => {
   // vscode-remote://ssh-remote+user@host/path
   const vscodeUri = `vscode-remote://ssh-remote+${sshUser}@${sshHost}${cwd}`;
   res.json({ ssh_host: sshHost, ssh_port: sshPort, ssh_user: sshUser, cwd, vscode_uri: vscodeUri });
+});
+
+// ── File detection & download helpers ────────────────────────────────────────
+
+function listAgentFiles(cwd) {
+  try {
+    return readdirSync(cwd)
+      .map(name => {
+        const full = join(cwd, name);
+        try {
+          const st = statSync(full);
+          if (!st.isFile()) return null;
+          return { name, path: full, mtime: st.mtimeMs, size: st.size,
+            download_url: `/api/download?path=${encodeURIComponent(full)}` };
+        } catch { return null; }
+      })
+      .filter(Boolean)
+      .sort((a, b) => b.mtime - a.mtime);
+  } catch { return []; }
+}
+
+// GET /api/agents/:id/files — list cwd files sorted by mtime desc
+router.get('/:id/files', (req, res) => {
+  const agent = agentManager.getAgent(req.params.id);
+  if (!agent) return res.status(404).json({ error: 'agent not found' });
+  const cwd = agent.config?.cwd ?? process.cwd();
+  res.json({ cwd, files: listAgentFiles(cwd) });
+});
+
+// POST /api/agents/:id/zip — zip selected files and stream download
+router.post('/:id/zip', (req, res) => {
+  const agent = agentManager.getAgent(req.params.id);
+  if (!agent) return res.status(404).json({ error: 'agent not found' });
+  const { paths } = req.body ?? {};
+  if (!Array.isArray(paths) || paths.length === 0)
+    return res.status(400).json({ error: 'paths array required' });
+
+  res.setHeader('Content-Type', 'application/zip');
+  res.setHeader('Content-Disposition', 'attachment; filename="files.zip"');
+
+  const archive = new ZipArchive({ zlib: { level: 6 } });
+  archive.on('error', err => { if (!res.headersSent) res.status(500).json({ error: err.message }); });
+  archive.pipe(res);
+  for (const p of paths) {
+    try { archive.file(p, { name: basename(p) }); } catch { /* skip inaccessible */ }
+  }
+  archive.finalize();
+});
+
+// POST /api/agents/:id/notify-files — scan cwd and broadcast file_created WS event
+router.post('/:id/notify-files', (req, res) => {
+  const agent = agentManager.getAgent(req.params.id);
+  if (!agent) return res.status(404).json({ error: 'agent not found' });
+  const cwd = agent.config?.cwd ?? process.cwd();
+  const files = listAgentFiles(cwd);
+  agentManager.broadcastToAgent(req.params.id, { type: 'file_created', files });
+  res.json({ ok: true, count: files.length });
 });
 
 // POST /api/agents/:id/inject — Master injects text into Worker's PTY

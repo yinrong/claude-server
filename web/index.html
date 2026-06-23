@@ -29,6 +29,7 @@
       <button id="btn-history" class="icon-btn" title="加载更多历史">⏪</button>
       <button id="btn-chdir" class="icon-btn" title="切换工作目录">📂</button>
       <button id="btn-files" class="icon-btn" title="文件浏览">🗂</button>
+      <button id="btn-generated" class="icon-btn" title="已生成文件">📋</button>
       <button id="btn-attach" class="icon-btn" title="附件">📎</button>
       <input id="file-input" type="file" accept="image/*,.pdf,.txt,.js,.ts,.py,.json,.md" multiple style="display:none" />
       <span id="conn-dot" class="status-dot disconnected"></span>
@@ -96,6 +97,22 @@
       <button id="chdir-cancel">取消</button>
       <button id="chdir-confirm" class="primary-btn">切换并重启</button>
     </div>
+  </div>
+</div>
+
+<!-- Generated files panel -->
+<div id="gen-panel" class="hidden">
+  <div id="gen-panel-header">
+    <span>📋 已生成文件</span>
+    <div style="display:flex;gap:6px;align-items:center">
+      <button id="gen-refresh" class="icon-btn" title="刷新">🔄</button>
+      <button id="gen-panel-close">✕</button>
+    </div>
+  </div>
+  <div id="gen-panel-list"></div>
+  <div id="gen-panel-footer" class="hidden">
+    <span id="gen-selected-count">已选 0 个</span>
+    <button id="gen-zip-btn" class="primary-btn">📦 打包下载</button>
   </div>
 </div>
 

@@ -201,6 +201,18 @@
 
 ---
 
+## 12. 文件生成监控与下载
+
+| # | 功能 | 说明 | 状态 | 测试 |
+|---|------|------|------|------|
+| FD1 | 检测 agent 新生成文件 | PTY idle 后扫描 cwd，通过 WS 广播 `file_created` 事件，按 mtime 倒序 | ✅ | FD1-T1 |
+| FD2 | 文件列表 API | GET /api/agents/:id/files 返回 cwd 内文件列表，按 mtime 倒序 | ✅ | FD2-T1 |
+| FD3 | 单文件下载 | 文件列表中的 download_url 可直接下载 | ✅ | FD3-T1 |
+| FD4 | 多文件压缩打包下载 | POST /api/agents/:id/zip { paths[] } 生成 zip 返回下载流 | ✅ | FD4-T1 |
+| FD5 | UI：生成文件面板 | agent 侧边📋按钮，显示倒序列表+下载链接+多选打包；PTY idle 自动扫描；WS file_created 实时刷新 | ✅ | FD1-T1,FD2-T1 |
+
+---
+
 ## 11. 核心用户场景验证
 
 | # | 功能 | 说明 | 状态 | 测试 |

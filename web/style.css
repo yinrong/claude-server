@@ -94,6 +94,30 @@ html, body, #app { height: 100%; background: #1e1e2e; color: #cdd6f4;
 #chdir-browse-list li { padding: 5px 12px; cursor: pointer; font-size: 13px; color: #89b4fa; }
 #chdir-browse-list li:hover { background: #27273a; }
 
+/* ── Generated files panel ── */
+#gen-panel { position: fixed; right: 0; top: 0; height: 100%; width: 400px; max-width: 100vw;
+  background: #181825; border-left: 1px solid #313244; z-index: 50;
+  display: flex; flex-direction: column; transition: transform .2s; }
+#gen-panel.hidden { transform: translateX(100%); display: flex !important; }
+#gen-panel-header { display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 14px; border-bottom: 1px solid #313244; font-size: 13px; color: #a6adc8; }
+#gen-panel-list { flex: 1; overflow-y: auto; padding: 6px 0; }
+.gf-item { display: flex; align-items: center; gap: 8px; padding: 7px 14px;
+  border-bottom: 1px solid #1e1e2e; cursor: pointer; transition: background .1s; }
+.gf-item:hover { background: #27273a; }
+.gf-item input[type=checkbox] { flex-shrink: 0; width: 15px; height: 15px; accent-color: #89b4fa; cursor: pointer; }
+.gf-name { flex: 1; font-size: 13px; color: #cdd6f4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gf-meta { font-size: 11px; color: #6c7086; white-space: nowrap; }
+.gf-dl { font-size: 18px; text-decoration: none; color: #89dceb; flex-shrink: 0; padding: 0 4px; }
+.gf-dl:hover { color: #cdd6f4; }
+.gf-empty { padding: 20px 14px; color: #6c7086; font-size: 13px; text-align: center; }
+#gen-panel-footer { padding: 10px 14px; border-top: 1px solid #313244;
+  display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+#gen-selected-count { font-size: 13px; color: #a6adc8; }
+#gen-zip-btn { padding: 6px 14px; font-size: 13px; }
+.gf-badge { display: inline-block; background: #f38ba8; color: #11111b;
+  border-radius: 10px; font-size: 10px; padding: 1px 6px; margin-left: 4px; }
+
 /* ── File browser panel ── */
 #file-panel { position: fixed; right: 0; top: 0; height: 100%; width: 380px; max-width: 100vw;
   background: #181825; border-left: 1px solid #313244; z-index: 50;
