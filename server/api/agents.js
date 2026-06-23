@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { hostname } from 'os';
 import { agentManager } from '../core/agent-manager.js';
 import { getAllMemory, getRecentOutput, countOutput, setAgentSessionId } from '../store/db.js';
 
@@ -101,6 +102,20 @@ router.post('/:id/analyze', async (req, res) => {
   // For now, acknowledge the request (async analysis runs in background)
   agentManager.triggerAnalysis(req.params.id, text);
   res.json({ ok: true, textLength: text.length });
+});
+
+// GET /api/agents/:id/workspace — returns SSH/VSCode Remote SSH connection info
+// Lets users open the agent's working directory in VSCode via Remote SSH.
+router.get('/:id/workspace', (req, res) => {
+  const agent = agentManager.getAgent(req.params.id);
+  if (!agent) return res.status(404).json({ error: 'agent not found' });
+  const cwd = agent.config?.cwd ?? process.cwd();
+  const sshHost = process.env.SSH_HOST ?? hostname();
+  const sshPort = parseInt(process.env.SSH_PORT ?? '22');
+  const sshUser = process.env.SSH_USER ?? process.env.USER ?? 'user';
+  // vscode-remote://ssh-remote+user@host/path
+  const vscodeUri = `vscode-remote://ssh-remote+${sshUser}@${sshHost}${cwd}`;
+  res.json({ ssh_host: sshHost, ssh_port: sshPort, ssh_user: sshUser, cwd, vscode_uri: vscodeUri });
 });
 
 // POST /api/agents/:id/inject — Master injects text into Worker's PTY

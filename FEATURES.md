@@ -201,6 +201,17 @@
 
 ---
 
+## 11. 核心用户场景验证
+
+| # | 功能 | 说明 | 状态 | 测试 |
+|---|------|------|------|------|
+| CV1 | 创建 claude-code 终端并完成任务 | 创建 PTY agent，发送任务，claude 在 workspace 完成并生成文件 | ✅ | CV1-T1 |
+| CV2 | 生成文件并下载 | claude 生成文件后用户通过 /api/download 下载到本地 | ✅ | CV2-T1 |
+| CV3 | VSCode 通过 ai-hub 通道访问工作空间 | /api/agents/:id/workspace 返回 SSH 连接信息，用户可用 VSCode Remote SSH 打开 cwd | ✅ | CV3-T1 |
+| CV4 | C (tunnel) 被意外 kill 后自动恢复 | SIGKILL tunnel 进程后，它自动重连，LLM 请求恢复正常 | ✅ | CV4-T1 |
+
+---
+
 ## 10. Roadmap
 
 ### 已完成
