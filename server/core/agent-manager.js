@@ -259,11 +259,33 @@ Excerpt: ${text.slice(-1500)}`;
       if (outputBuffer.length > 4096) outputBuffer = outputBuffer.slice(-4096);
     });
 
+    // Circuit breaker state lives on session so it persists across rewires
+    if (session && !session._rapidExitCount) {
+      session._rapidExitCount = 0;
+      session._rapidExitTimer = null;
+    }
+
     adapter.on('exit', (code) => {
       if (session) session.waitingForInput = false;
       clearTimeout(idleTimer);
+
       // Auto-restart PTY adapter (slash commands like /resume cause internal exit)
       if (adapter.type === 'claude-code') {
+        if (session) {
+          session._rapidExitCount = (session._rapidExitCount ?? 0) + 1;
+          clearTimeout(session._rapidExitTimer);
+          session._rapidExitTimer = setTimeout(() => { if (session) session._rapidExitCount = 0; }, 10000);
+
+          // Circuit breaker: ≥3 rapid exits within 10s → mark errored, stop restarting
+          if (session._rapidExitCount >= 3) {
+            const msg = `\r\n[连续崩溃 ${session._rapidExitCount} 次，已停止重启。请检查工作目录或 claude 二进制路径。]\r\n`;
+            this._broadcast(agentId, { type: 'output', data: msg });
+            setAgentStatus(agentId, 'errored');
+            this._broadcast(agentId, { type: 'exit', code });
+            return;
+          }
+        }
+
         this._broadcast(agentId, { type: 'output', data: `\r\n[进程退出 (code ${code}), 正在重启...]\r\n` });
         adapter.removeAllListeners();
         adapter._spawn();

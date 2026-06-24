@@ -20,8 +20,8 @@ export class ClaudeCodeAdapter extends AIAdapter {
   get alive() { return !this._exited && this._pty !== null; }
 
   _spawn() {
-    const { cwd = process.cwd(), model, resumeSessionId } = this.config;
-    const claudeBin = process.env.CLAUDE_BIN ?? 'claude';
+    const { cwd = process.cwd(), model, resumeSessionId, claudeBin: configBin } = this.config;
+    const claudeBin = configBin ?? process.env.CLAUDE_BIN ?? 'claude';
 
     const modelArgs = model ? ['--model', model] : [];
     const resumeArgs = resumeSessionId ? ['--resume', resumeSessionId] : [];

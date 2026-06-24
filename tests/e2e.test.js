@@ -1021,3 +1021,42 @@ test('MS3: refresh returns all models with {provider}/{id} name format', async (
   // Just verify the format is correct for whatever is returned
   expect(names.length).toBeGreaterThan(0);
 });
+
+// ── BUG7: inaccessible cwd returns 400, not 201 + crashing PTY ───────────────
+// claude 逻辑路径：无（测试 HTTP 校验层，不涉及 claude 调用）
+test('BUG7-T1: creating agent with inaccessible cwd returns 400, not crashing PTY', async ({ request }) => {
+  const badCwd = '/root/nonexistent-restricted-dir-' + Date.now();
+  const res = await request.post('/api/agents', {
+    data: { name: 'BadCwdAgent', type: 'worker', adapterType: 'claude-code', config: { cwd: badCwd } },
+  });
+  expect(res.status()).toBe(400);
+  const body = await res.json();
+  expect(body).toHaveProperty('error');
+  expect(body.error.toLowerCase()).toMatch(/permission|directory|cwd|access/);
+});
+
+// claude 逻辑路径：无（测试 PTY 崩溃熔断机制，使用 claudeBin 指向不存在的二进制触发崩溃）
+test('BUG7-T2: claude-code agent with non-existent binary stops restarting after repeated failures', async ({ request }) => {
+  test.setTimeout(30000);
+  // config.claudeBin 覆盖 CLAUDE_BIN env，让 PTY 每次启动都失败
+  const res = await request.post('/api/agents', {
+    data: {
+      name: 'CrashAgent',
+      type: 'worker',
+      adapterType: 'claude-code',
+      config: { cwd: '/tmp', claudeBin: '/nonexistent/fake-claude-' + Date.now() },
+    },
+  });
+  expect(res.status()).toBe(201);
+  const agent = await res.json();
+
+  // 等 5 秒，然后检查 agent 已进入 errored 状态（不再重启）
+  await new Promise(r => setTimeout(r, 5000));
+
+  const statusRes = await request.get(`/api/agents/${agent.id}`);
+  expect(statusRes.status()).toBe(200);
+  const info = await statusRes.json();
+
+  // agent 应该处于 errored 状态，而不是仍在不断重启
+  expect(info.status).toBe('errored');
+});
