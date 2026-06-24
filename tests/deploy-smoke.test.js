@@ -1,9 +1,11 @@
 /**
  * BUG8-T1: Deployment smoke test — runs against any target server via BASE_URL.
  *
- * Usage:
- *   BASE_URL=http://localhost:4280 npx playwright test tests/deploy-smoke.test.js
- *   BASE_URL=http://111.229.143.69:4280 npx playwright test tests/deploy-smoke.test.js
+ * Usage (no auth):
+ *   BASE_URL=http://localhost:4280 npx playwright test --config=playwright.deploy-smoke.config.js
+ *
+ * Usage (with auth — register a temp user first):
+ *   BASE_URL=http://host:4280 AUTH_USER=smoke AUTH_PASS=smokepass123 npx playwright test --config=playwright.deploy-smoke.config.js
  *
  * Catches environment problems (missing claude binary, wrong cwd permissions, etc.)
  * that only manifest on the actual deployment target — not the local test server.
@@ -17,6 +19,37 @@ import { WebSocket } from 'ws';
 
 const BASE = process.env.BASE_URL ?? `http://localhost:${process.env.PORT ?? 4280}`;
 const WS_BASE = BASE.replace(/^http/, 'ws') + '/ws';
+
+// Obtain auth token if server has auth enabled
+async function getAuthToken() {
+  const user = process.env.AUTH_USER ?? `smoke_${Date.now()}`;
+  const pass = process.env.AUTH_PASS ?? 'smokepass123';
+  // Try register first (idempotent if already exists)
+  const regRes = await fetch(`${BASE}/api/auth/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: user, password: pass }),
+  });
+  if (regRes.ok) {
+    const { token } = await regRes.json();
+    return token;
+  }
+  // Already registered — login
+  const loginRes = await fetch(`${BASE}/api/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: user, password: pass }),
+  });
+  if (loginRes.ok) {
+    const { token } = await loginRes.json();
+    return token;
+  }
+  return null; // Server has no auth
+}
+
+function authHeaders(token) {
+  return token ? { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' } : { 'Content-Type': 'application/json' };
+}
 
 test.setTimeout(60000);
 
@@ -32,10 +65,13 @@ test('BUG8-T1a: deployed server health check passes', async () => {
 // 这是捕获"部署后 claude 未安装"问题的关键测试
 // claude 逻辑路径：ClaudeCodeAdapter._spawn() → pty.spawn(claudeBin) → waitingForInput
 test('BUG8-T1b: claude-code PTY agent starts and reaches waitingForInput state', async () => {
+  const token = await getAuthToken();
+  const headers = authHeaders(token);
+
   // Create agent
   const createRes = await fetch(`${BASE}/api/agents`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify({
       name: 'SmokeTest',
       type: 'worker',
@@ -43,11 +79,12 @@ test('BUG8-T1b: claude-code PTY agent starts and reaches waitingForInput state',
       config: { cwd: '/tmp' },
     }),
   });
-  expect(createRes.status, 'agent creation should succeed (200/201)').toBe(201);
+  expect(createRes.status, 'agent creation should succeed (201)').toBe(201);
   const agent = await createRes.json();
 
-  // Connect WebSocket and wait for waitingForInput=true (claude binary found and started)
-  const ws = new WebSocket(`${WS_BASE}?agentId=${agent.id}`);
+  // Connect WebSocket with token
+  const wsUrl = token ? `${WS_BASE}?agentId=${agent.id}&token=${token}` : `${WS_BASE}?agentId=${agent.id}`;
+  const ws = new WebSocket(wsUrl);
   await new Promise((resolve, reject) => {
     ws.on('error', reject);
     setTimeout(() => reject(new Error('WS connect timeout')), 5000);
@@ -57,8 +94,7 @@ test('BUG8-T1b: claude-code PTY agent starts and reaches waitingForInput state',
   let gotWaitingForInput = false;
   const result = await new Promise((resolve, reject) => {
     const t = setTimeout(() => {
-      // Check if agent is errored (binary not found)
-      fetch(`${BASE}/api/agents/${agent.id}`)
+      fetch(`${BASE}/api/agents/${agent.id}`, { headers: authHeaders(token) })
         .then(r => r.json())
         .then(info => {
           if (info.status === 'errored') {
@@ -89,5 +125,5 @@ test('BUG8-T1b: claude-code PTY agent starts and reaches waitingForInput state',
   expect(gotWaitingForInput).toBe(true);
 
   // Cleanup
-  await fetch(`${BASE}/api/agents/${agent.id}`, { method: 'DELETE' });
+  await fetch(`${BASE}/api/agents/${agent.id}`, { method: 'DELETE', headers: authHeaders(token) });
 });
