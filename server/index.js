@@ -11,10 +11,13 @@ import modelsRouter from './api/models.js';
 import v2Router from './api/v2.js';
 import providersRouter from './api/providers.js';
 import authRouter from './api/auth.js';
+import adminRouter from './api/admin.js';
 import { authMiddleware, verifyWsToken } from './middleware/auth.js';
 import { handleWS } from './ws.js';
 import { agentManager } from './core/agent-manager.js';
-import { getAllMemory, getRecentCommands } from './store/db.js';
+import { getAllMemory, getRecentCommands, getUserByUsername, createUser } from './store/db.js';
+import { createHash } from 'crypto';
+import { signToken } from './api/auth.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const FILES_DIR = process.env.FILES_DIR ?? join(process.cwd(), 'data', 'files');
@@ -32,6 +35,9 @@ app.use('/api/auth', authRouter);
 
 // Apply auth middleware to all /api/* routes
 app.use('/api', authMiddleware());
+
+// Admin routes (require admin token — checked inside adminRouter)
+app.use('/api/admin', adminRouter);
 
 // API routes
 app.use('/api/agents', agentsRouter);
@@ -93,8 +99,11 @@ app.get('/api/readfile', (req, res) => {
   }
 });
 
-// Chat UI route (方案A)
+// Chat UI route
 app.get('/chat', (_req, res) => res.sendFile('chat.html', { root: join(__dirname, '..', 'web') }));
+
+// Admin UI route
+app.get('/admin', (_req, res) => res.sendFile('admin.html', { root: join(__dirname, '..', 'web') }));
 
 // Trigger restoreFromDB (for testing and manual restore)
 app.post('/api/restore', (_req, res) => {
@@ -115,6 +124,18 @@ wss.on('connection', (ws, req) => {
 
 // Restore agents from DB on startup
 agentManager.restoreFromDB();
+
+// Seed super admin on startup if configured
+const ADMIN_USERNAME = process.env.ADMIN_USERNAME;
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
+if (ADMIN_USERNAME && ADMIN_PASSWORD) {
+  const JWT_SECRET = process.env.JWT_SECRET ?? 'ai-hub-default-secret-change-in-prod';
+  const passwordHash = createHash('sha256').update(ADMIN_PASSWORD + JWT_SECRET).digest('hex');
+  if (!getUserByUsername(ADMIN_USERNAME)) {
+    createUser({ username: ADMIN_USERNAME, passwordHash, isAdmin: true });
+    console.log(`[auth] Super admin created: ${ADMIN_USERNAME}`);
+  }
+}
 
 const PORT = process.env.PORT ?? 4280;
 server.listen(PORT, () => {

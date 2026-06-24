@@ -11,8 +11,8 @@ function hashPassword(password) {
   return createHash('sha256').update(password + JWT_SECRET).digest('hex');
 }
 
-export function signToken(userId, username) {
-  return jwt.sign({ sub: userId, username }, JWT_SECRET, { expiresIn: '30d' });
+export function signToken(userId, username, isAdmin = false) {
+  return jwt.sign({ sub: userId, username, is_admin: isAdmin ? 1 : 0 }, JWT_SECRET, { expiresIn: '30d' });
 }
 
 // POST /api/auth/register
@@ -24,7 +24,7 @@ router.post('/register', (req, res) => {
 
   try {
     const user = createUser({ username, passwordHash: hashPassword(password) });
-    const token = signToken(user.id, user.username);
+    const token = signToken(user.id, user.username, user.is_admin);
     res.status(201).json({ token, username: user.username });
   } catch (err) {
     if (err.message?.includes('UNIQUE')) return res.status(409).json({ error: 'username already taken' });
@@ -41,8 +41,8 @@ router.post('/login', (req, res) => {
   if (!user || user.password_hash !== hashPassword(password)) {
     return res.status(401).json({ error: 'invalid credentials' });
   }
-  const token = signToken(user.id, user.username);
-  res.json({ token, username: user.username });
+  const token = signToken(user.id, user.username, user.is_admin);
+  res.json({ token, username: user.username, is_admin: user.is_admin });
 });
 
 export default router;

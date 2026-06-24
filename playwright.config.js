@@ -4,7 +4,7 @@ const PORT = parseInt(process.env.PORT ?? '37890');
 
 export default defineConfig({
   testDir: './tests',
-  testIgnore: ['**/chat-smoke.test.js', '**/ui-smoke.test.js', '**/auth.test.js'],
+  testIgnore: ['**/chat-smoke.test.js', '**/ui-smoke.test.js', '**/auth.test.js', '**/admin.test.js'],
   timeout: 60000,
   use: {
     baseURL: `http://localhost:${PORT}`,

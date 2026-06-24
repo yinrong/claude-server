@@ -94,6 +94,7 @@ db.exec(`
     id TEXT PRIMARY KEY,
     username TEXT UNIQUE NOT NULL,
     password_hash TEXT NOT NULL,
+    is_admin INTEGER NOT NULL DEFAULT 0,
     created_at INTEGER NOT NULL
   );
 `);
@@ -393,13 +394,25 @@ export function setDefaultProvider(id) {
 }
 
 // ── Users ──────────────────────────────────────────────────────────────────
-export function createUser({ username, passwordHash }) {
+export function createUser({ username, passwordHash, isAdmin = false }) {
   const id = randomUUID();
   const now = Date.now();
-  db.prepare('INSERT INTO users (id, username, password_hash, created_at) VALUES (?,?,?,?)').run(id, username, passwordHash, now);
-  return { id, username, created_at: now };
+  db.prepare('INSERT INTO users (id, username, password_hash, is_admin, created_at) VALUES (?,?,?,?,?)').run(id, username, passwordHash, isAdmin ? 1 : 0, now);
+  return { id, username, is_admin: isAdmin ? 1 : 0, created_at: now };
 }
 
 export function getUserByUsername(username) {
   return db.prepare('SELECT * FROM users WHERE username = ?').get(username) ?? null;
+}
+
+export function getAllUsers() {
+  return db.prepare('SELECT id, username, is_admin, created_at FROM users ORDER BY created_at ASC').all();
+}
+
+export function updateUserPassword(id, passwordHash) {
+  db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(passwordHash, id);
+}
+
+export function deleteUser(id) {
+  db.prepare('DELETE FROM users WHERE id = ?').run(id);
 }

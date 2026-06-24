@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Admin — Claude Hub</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, sans-serif; background: #1e1e2e; color: #cdd6f4; min-height: 100vh; }
+    .container { max-width: 800px; margin: 0 auto; padding: 32px 16px; }
+    h1 { font-size: 22px; margin-bottom: 24px; color: #cba6f7; }
+    h2 { font-size: 16px; margin: 24px 0 12px; color: #a6adc8; }
+    .card { background: #181825; border: 1px solid #313244; border-radius: 8px; padding: 20px; margin-bottom: 16px; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th { text-align: left; padding: 8px 12px; border-bottom: 1px solid #313244; color: #6c7086; font-weight: 500; }
+    td { padding: 8px 12px; border-bottom: 1px solid #1e1e2e; }
+    tr:last-child td { border-bottom: none; }
+    .badge { background: #cba6f7; color: #1e1e2e; font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: 600; }
+    .form-row { display: flex; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
+    input { background: #11111b; border: 1px solid #313244; color: #cdd6f4; padding: 8px 12px;
+            border-radius: 6px; font-size: 13px; flex: 1; min-width: 140px; }
+    input:focus { outline: none; border-color: #cba6f7; }
+    button { padding: 8px 16px; border: none; border-radius: 6px; font-size: 13px; cursor: pointer; }
+    .btn-primary { background: #cba6f7; color: #1e1e2e; font-weight: 600; }
+    .btn-primary:hover { background: #b4befe; }
+    .btn-danger { background: #f38ba8; color: #1e1e2e; font-weight: 600; }
+    .btn-danger:hover { background: #eba0ac; }
+    .btn-sm { padding: 4px 10px; font-size: 12px; }
+    .btn-secondary { background: #313244; color: #cdd6f4; }
+    .btn-secondary:hover { background: #45475a; }
+    #msg { margin-top: 12px; font-size: 13px; padding: 8px 12px; border-radius: 6px; display: none; }
+    #msg.ok { background: #a6e3a1; color: #1e1e2e; display: block; }
+    #msg.err { background: #f38ba8; color: #1e1e2e; display: block; }
+    .login-wrap { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+    .login-card { background: #181825; border: 1px solid #313244; border-radius: 12px; padding: 32px; width: 320px; }
+    .login-card h1 { text-align: center; margin-bottom: 20px; }
+    .login-card input { display: block; width: 100%; margin-bottom: 12px; }
+    .login-card button { width: 100%; }
+    #login-err { margin-top: 10px; font-size: 13px; color: #f38ba8; text-align: center; }
+    .top-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+    .top-bar a { color: #89b4fa; font-size: 13px; text-decoration: none; }
+  </style>
+</head>
+<body>
+
+<!-- Login screen (shown when not logged in) -->
+<div id="login-screen" class="login-wrap">
+  <div class="login-card">
+    <h1>🔐 Admin Login</h1>
+    <input id="login-user" type="text" placeholder="用户名" />
+    <input id="login-pass" type="password" placeholder="密码" />
+    <button class="btn-primary" onclick="doLogin()">登录</button>
+    <div id="login-err"></div>
+  </div>
+</div>
+
+<!-- Admin panel (shown after login) -->
+<div id="admin-screen" style="display:none">
+  <div class="container">
+    <div class="top-bar">
+      <h1>⚙️ Claude Hub 管理</h1>
+      <div>
+        <a href="/">← 返回主页</a>&nbsp;&nbsp;
+        <button class="btn-secondary btn-sm" onclick="logout()">退出</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>用户列表</h2>
+      <table>
+        <thead><tr><th>用户名</th><th>角色</th><th>注册时间</th><th>操作</th></tr></thead>
+        <tbody id="user-table-body"></tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h2>添加用户</h2>
+      <div class="form-row">
+        <input id="new-username" type="text" placeholder="用户名" />
+        <input id="new-password" type="password" placeholder="密码（至少6位）" />
+        <button class="btn-primary" onclick="addUser()">添加</button>
+      </div>
+      <div id="msg"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const TOKEN_KEY = 'admin_token';
+
+async function doLogin() {
+  const username = document.getElementById('login-user').value.trim();
+  const password = document.getElementById('login-pass').value;
+  const err = document.getElementById('login-err');
+  err.textContent = '';
+
+  const res = await fetch('/api/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password }),
+  });
+  const body = await res.json();
+  if (!res.ok) { err.textContent = body.error ?? '登录失败'; return; }
+  if (!body.is_admin) { err.textContent = '该账号没有管理员权限'; return; }
+
+  localStorage.setItem(TOKEN_KEY, body.token);
+  showAdmin();
+}
+
+function logout() {
+  localStorage.removeItem(TOKEN_KEY);
+  location.reload();
+}
+
+function authHeaders() {
+  return { Authorization: `Bearer ${localStorage.getItem(TOKEN_KEY)}`, 'Content-Type': 'application/json' };
+}
+
+async function loadUsers() {
+  const res = await fetch('/api/admin/users', { headers: authHeaders() });
+  if (!res.ok) { logout(); return; }
+  const { users } = await res.json();
+  const tbody = document.getElementById('user-table-body');
+  tbody.innerHTML = users.map(u => `
+    <tr>
+      <td>${u.username}</td>
+      <td>${u.is_admin ? '<span class="badge">管理员</span>' : '普通用户'}</td>
+      <td>${new Date(u.created_at).toLocaleDateString('zh-CN')}</td>
+      <td>
+        <button class="btn-secondary btn-sm" onclick="changePassword('${u.id}','${u.username}')">改密码</button>
+        ${!u.is_admin ? `<button class="btn-danger btn-sm" style="margin-left:6px" onclick="deleteUser('${u.id}','${u.username}')">删除</button>` : ''}
+      </td>
+    </tr>`).join('');
+}
+
+async function addUser() {
+  const username = document.getElementById('new-username').value.trim();
+  const password = document.getElementById('new-password').value;
+  const msgEl = document.getElementById('msg');
+  msgEl.className = '';
+
+  const res = await fetch('/api/admin/users', {
+    method: 'POST', headers: authHeaders(),
+    body: JSON.stringify({ username, password }),
+  });
+  const body = await res.json();
+  if (!res.ok) { msgEl.className = 'err'; msgEl.textContent = body.error; return; }
+  msgEl.className = 'ok'; msgEl.textContent = `用户 ${username} 已添加`;
+  document.getElementById('new-username').value = '';
+  document.getElementById('new-password').value = '';
+  loadUsers();
+}
+
+async function changePassword(id, username) {
+  const pw = prompt(`为 ${username} 设置新密码（至少6位）:`);
+  if (!pw) return;
+  const res = await fetch(`/api/admin/users/${id}/password`, {
+    method: 'PATCH', headers: authHeaders(),
+    body: JSON.stringify({ password: pw }),
+  });
+  const body = await res.json();
+  if (!res.ok) { alert(body.error); return; }
+  alert('密码已修改');
+}
+
+async function deleteUser(id, username) {
+  if (!confirm(`确认删除用户 ${username}?`)) return;
+  const res = await fetch(`/api/admin/users/${id}`, {
+    method: 'DELETE', headers: authHeaders(),
+  });
+  const body = await res.json();
+  if (!res.ok) { alert(body.error); return; }
+  loadUsers();
+}
+
+function showAdmin() {
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('admin-screen').style.display = 'block';
+  loadUsers();
+}
+
+// Check if already logged in
+const token = localStorage.getItem(TOKEN_KEY);
+if (token) {
+  // Quick check: verify token is still valid
+  fetch('/api/admin/users', { headers: { Authorization: `Bearer ${token}` } })
+    .then(r => r.ok ? showAdmin() : null)
+    .catch(() => null);
+}
+</script>
+</body>
+</html>

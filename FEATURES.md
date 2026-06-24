@@ -159,6 +159,10 @@
 | AU2 | 用户登录 | POST /api/auth/login {username, password} → 返回 JWT token | ✅ | AU2-T1 |
 | AU3 | 认证中间件 | 所有 /api/* 和 /ws 必须携带有效 token，否则 401 | ✅ | AU3-T1,AU3-T2,AU3-T3 |
 | AU4 | 环境变量关闭认证 | AUTH_DISABLED=true 时跳过认证（单机私用模式） | ✅ | AU4-T1 |
+| AU5 | 超级管理员自动初始化 | 启动时若超级管理员不存在则自动创建（凭证由 ADMIN_USERNAME/ADMIN_PASSWORD 环境变量注入） | ✅ | AU5-T1 |
+| AU6 | 管理员用户管理 API | GET/POST /api/admin/users，PATCH /api/admin/users/:id/password，DELETE /api/admin/users/:id | ✅ | AU6-T1~T4 |
+| AU7 | /admin 管理页面 | 纯静态 HTML，列出用户、添加用户、修改密码、删除用户 | ✅ | AU7-smoke |
+| AU8 | 超级管理员可正常登录使用 | 与普通用户相同的登录和 agent 操作流程 | ✅ | AU8-T1 |
 
 ---
 
