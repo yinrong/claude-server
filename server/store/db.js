@@ -89,6 +89,13 @@ db.exec(`
     is_default INTEGER NOT NULL DEFAULT 0,
     created_at INTEGER NOT NULL
   );
+
+  CREATE TABLE IF NOT EXISTS users (
+    id TEXT PRIMARY KEY,
+    username TEXT UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+  );
 `);
 
 // ── Migrations ─────────────────────────────────────────────────────────────
@@ -383,4 +390,16 @@ export function setDefaultProvider(id) {
     clearDefaultProviders.run();
     setDefaultProviderStmt.run(id);
   })();
+}
+
+// ── Users ──────────────────────────────────────────────────────────────────
+export function createUser({ username, passwordHash }) {
+  const id = randomUUID();
+  const now = Date.now();
+  db.prepare('INSERT INTO users (id, username, password_hash, created_at) VALUES (?,?,?,?)').run(id, username, passwordHash, now);
+  return { id, username, created_at: now };
+}
+
+export function getUserByUsername(username) {
+  return db.prepare('SELECT * FROM users WHERE username = ?').get(username) ?? null;
 }

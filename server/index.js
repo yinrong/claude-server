@@ -10,6 +10,8 @@ import filesRouter from './api/files.js';
 import modelsRouter from './api/models.js';
 import v2Router from './api/v2.js';
 import providersRouter from './api/providers.js';
+import authRouter from './api/auth.js';
+import { authMiddleware, verifyWsToken } from './middleware/auth.js';
 import { handleWS } from './ws.js';
 import { agentManager } from './core/agent-manager.js';
 import { getAllMemory, getRecentCommands } from './store/db.js';
@@ -24,6 +26,12 @@ app.use(express.static(join(__dirname, '..', 'web')));
 
 // Serve uploaded files
 app.use('/files', express.static(FILES_DIR));
+
+// Auth routes (public — no token required)
+app.use('/api/auth', authRouter);
+
+// Apply auth middleware to all /api/* routes
+app.use('/api', authMiddleware());
 
 // API routes
 app.use('/api/agents', agentsRouter);
@@ -100,7 +108,10 @@ app.get('/health', (_req, res) => res.json({ ok: true }));
 // WebSocket
 const server = createServer(app);
 const wss = new WebSocketServer({ server, path: '/ws' });
-wss.on('connection', (ws, req) => handleWS(ws, req));
+wss.on('connection', (ws, req) => {
+  if (!verifyWsToken(req)) { ws.close(4001, 'unauthorized'); return; }
+  handleWS(ws, req);
+});
 
 // Restore agents from DB on startup
 agentManager.restoreFromDB();

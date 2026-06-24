@@ -151,6 +151,17 @@
 
 ---
 
+## 13. 用户认证
+
+| # | 功能 | 说明 | 状态 | 测试 |
+|---|------|------|------|------|
+| AU1 | 用户注册 | POST /api/auth/register {username, password} → 创建账号，返回 token | ✅ | AU1-T1 |
+| AU2 | 用户登录 | POST /api/auth/login {username, password} → 返回 JWT token | ✅ | AU2-T1 |
+| AU3 | 认证中间件 | 所有 /api/* 和 /ws 必须携带有效 token，否则 401 | ✅ | AU3-T1,AU3-T2,AU3-T3 |
+| AU4 | 环境变量关闭认证 | AUTH_DISABLED=true 时跳过认证（单机私用模式） | ✅ | AU4-T1 |
+
+---
+
 ## 7. ai-hub 整合
 
 ### 7.1 router 组件（原 llm-router/x）
@@ -230,9 +241,6 @@
 所有 server/Flutter 核心功能已实现，见上方各表。
 
 ### 待完成
-| 功能 | 说明 |
-|------|------|
-| AU1~AU4 | 多用户认证（见 [ai-hub-architecture.md](docs/design/ai-hub-architecture.md)） |
 | MC2~MC8 | Flutter App 功能缺少 integration_test（当前测试均为 Dart 单元测试，不符合规范） |
 
 ---
