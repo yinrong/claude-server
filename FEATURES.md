@@ -250,3 +250,4 @@
 | ~~BUG5~~ | ~~E2E 测试全用 mock 未检测到 claude binary 损坏~~ | ~~已修复: T26 调用真实 claude~~ | — | ✅ T26 |
 | ~~BUG6~~ | ~~模型列表缺少 provider 前缀：`pa/claude-sonnet-4-6` 应为 `ppio/pa/claude-sonnet-4-6`~~ | ~~已修复: `fetchModelsFromProxy` 改为始终用 `owned_by/id`~~ | — | ✅ BUG6 |
 | ~~BUG7~~ | ~~创建 Agent 时 cwd 无权限/claude 二进制不存在，PTY 进入无限崩溃重启循环~~ | ~~已修复：①mkdirSync EACCES → 400；②agent-manager 熔断：3次快速 exit 内 → 标 errored 停止重启~~ | — | ✅ BUG7-T1,BUG7-T2 |
+| ~~BUG8~~ | ~~部署后未在目标环境跑 E2E，导致 claude binary 缺失等环境问题漏测~~ | ~~已修复：新增 deploy-smoke.test.js + playwright.deploy-smoke.config.js，每次部署后必跑~~ | — | ✅ BUG8-T1 |
