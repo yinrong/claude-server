@@ -12,7 +12,7 @@ class CompletionService:
         try:
             record = CompletionRecord(
                 ts=int(raw["ts"]),
-                group_id=raw["group_id"],
+                user_id=raw["user_id"],
                 model=raw["model"],
                 messages=raw["messages"],
                 response_content=raw.get("response_content", ""),

@@ -5,32 +5,32 @@ import time
 import pytest
 
 
-async def _create_group(http_client, url, phone, suffix):
-    async with http_client.post(f"{url}/api/groups", json={"phone": phone, "suffix": suffix}) as resp:
+async def _create_user(http_client, url, user_id):
+    async with http_client.post(f"{url}/api/users", json={"user_id": user_id}) as resp:
         assert resp.status == 201, await resp.text()
         return await resp.json()
 
 
-async def _register_c(http_client, url, group_id, client_id):
+async def _register_c(http_client, url, user_id, client_id):
     async with http_client.post(
         f"{url}/api/register/c",
-        json={"group_id": group_id, "client_id": client_id, "version": "0.0.1", "hostname": "test"},
+        json={"user_id": user_id, "client_id": client_id, "version": "0.0.1", "hostname": "test"},
     ) as resp:
         assert resp.status == 200, await resp.text()
         return await resp.json()
 
 
-async def _elect(http_client, url, group_id, client_id):
+async def _elect(http_client, url, user_id, client_id):
     async with http_client.post(
-        f"{url}/api/elect/{group_id}",
+        f"{url}/api/elect/{user_id}",
         json={"client_id": client_id},
     ) as resp:
         return resp.status, await resp.json()
 
 
 async def test_single_c_becomes_active(x_server, http_client):
-    gid = "13902000001_e1"
-    await _create_group(http_client, x_server["url"], "13902000001", "e1")
+    gid = "elect-host-e1"
+    await _create_user(http_client, x_server["url"], gid)
     await _register_c(http_client, x_server["url"], gid, "c-solo")
     status, body = await _elect(http_client, x_server["url"], gid, "c-solo")
     assert status == 200, body
@@ -39,8 +39,8 @@ async def test_single_c_becomes_active(x_server, http_client):
 
 
 async def test_two_cs_only_one_active(x_server, http_client):
-    gid = "13902000002_e2"
-    await _create_group(http_client, x_server["url"], "13902000002", "e2")
+    gid = "elect-host-e2"
+    await _create_user(http_client, x_server["url"], gid)
     await _register_c(http_client, x_server["url"], gid, "c-a")
     await _register_c(http_client, x_server["url"], gid, "c-b")
 
@@ -61,16 +61,15 @@ async def test_two_cs_only_one_active(x_server, http_client):
 
 
 async def test_unknown_client_in_election(x_server, http_client):
-    gid = "13902000003_e3"
-    await _create_group(http_client, x_server["url"], "13902000003", "e3")
-    # Do NOT register any C client.
+    gid = "elect-host-e3"
+    await _create_user(http_client, x_server["url"], gid)
     status, body = await _elect(http_client, x_server["url"], gid, "c-ghost")
     assert status == 404, body
 
 
 async def test_active_failover_via_db(x_server, http_client):
-    gid = "13902000004_e4"
-    await _create_group(http_client, x_server["url"], "13902000004", "e4")
+    gid = "elect-host-e4"
+    await _create_user(http_client, x_server["url"], gid)
 
     reg_svc = x_server["app"]["services"]["registration"]
     elect_svc = x_server["app"]["services"]["election"]
@@ -94,8 +93,8 @@ async def test_active_failover_via_db(x_server, http_client):
 
 
 async def test_election_acts_as_heartbeat(x_server, http_client):
-    gid = "13902000005_e5"
-    await _create_group(http_client, x_server["url"], "13902000005", "e5")
+    gid = "elect-host-e5"
+    await _create_user(http_client, x_server["url"], gid)
     await _register_c(http_client, x_server["url"], gid, "c-hb")
 
     before = int(time.time())

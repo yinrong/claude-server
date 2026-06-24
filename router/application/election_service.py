@@ -3,19 +3,19 @@ import time
 from typing import Optional
 
 from router.domain.election import decide_election
-from router.infrastructure.repositories.base import ClientRepository, GroupRepository
+from router.infrastructure.repositories.base import ClientRepository, UserRepository
 
 ACTIVE_TAKEOVER_FACTOR = 2
 
 
 class ElectionService:
-    def __init__(self, client_repo: ClientRepository, group_repo: GroupRepository):
+    def __init__(self, client_repo: ClientRepository, user_repo: UserRepository):
         self._clients = client_repo
-        self._groups = group_repo
+        self._users = user_repo
 
     def claim_active(
         self,
-        group_id: str,
+        user_id: str,
         client_id: str,
         *,
         election_poll: int = 5,
@@ -33,14 +33,14 @@ class ElectionService:
                 "error": "unknown_client",
             }
 
-        candidates = self._clients.get_candidates(group_id)
+        candidates = self._clients.get_candidates(user_id)
         decision = decide_election(
             client_id, candidates, now_ts=ts, stale_threshold=stale_threshold
         )
 
         if decision.took_over:
-            self._clients.clear_active(group_id)
-            self._clients.set_active(group_id, decision.winner_id, decision.winner_since)
+            self._clients.clear_active(user_id)
+            self._clients.set_active(user_id, decision.winner_id, decision.winner_since)
 
         return {
             "active": decision.winner_id == client_id,

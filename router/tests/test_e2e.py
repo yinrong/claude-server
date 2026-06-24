@@ -11,7 +11,7 @@ from aiohttp import web
 
 
 TEST_TUNNEL_SECRET = "tun-test-secret-for-e2e"
-TEST_GROUP_ID = "13800138000_test"
+TEST_GROUP_ID = "test-host"
 
 
 async def test_static_index(x_server, client):
@@ -182,8 +182,8 @@ async def test_concurrent_requests(full_chain, client):
 async def test_tunnel_disconnect_reconnect(x_server, mock_llm, client):
     """After tunnel disconnects, requests fail; after reconnect, they succeed."""
     import os
-    from c.settings import CSettings
-    from c.tunnel_worker import TunnelWorker
+    from tunnel.settings import CSettings
+    from tunnel.tunnel_worker import TunnelWorker
 
     port = x_server["port"]
     relay = x_server["app"]["relay"]
@@ -191,7 +191,7 @@ async def test_tunnel_disconnect_reconnect(x_server, mock_llm, client):
     def _make_worker():
         s = CSettings(
             x_base_url=x_server["url"],
-            group_id=TEST_GROUP_ID,
+            user_id=TEST_GROUP_ID,
             client_id=os.environ["CLIENT_ID_C"],
             tunnel_secret=TEST_TUNNEL_SECRET,
             internal_llm_base=f"http://127.0.0.1:{mock_llm['port']}",
@@ -274,8 +274,8 @@ async def test_upstream_unreachable(x_server, client):
     """Request when upstream LLM is unreachable returns 502 proxy_error."""
     import os
     import socket
-    from c.settings import CSettings
-    from c.tunnel_worker import TunnelWorker
+    from tunnel.settings import CSettings
+    from tunnel.tunnel_worker import TunnelWorker
 
     port = x_server["port"]
     relay = x_server["app"]["relay"]
@@ -289,7 +289,7 @@ async def test_upstream_unreachable(x_server, client):
     # Create worker pointing to unreachable LLM
     settings = CSettings(
         x_base_url=x_server["url"],
-        group_id=TEST_GROUP_ID,
+        user_id=TEST_GROUP_ID,
         client_id=os.environ["CLIENT_ID_C"],
         tunnel_secret=TEST_TUNNEL_SECRET,
         internal_llm_base=f"http://127.0.0.1:{dead_port}",
@@ -358,7 +358,7 @@ async def test_completion_log_non_stream(full_chain, client):
     matched = [r for r in records if r.get("messages") == [{"role": "user", "content": "log me"}]]
     assert len(matched) >= 1
     r = matched[0]
-    assert r["group_id"] == TEST_GROUP_ID
+    assert r["user_id"] == TEST_GROUP_ID
     assert r["model"] == "test-model"
     assert r["finish_reason"] != ""
     assert r["latency_ms"] >= 0
@@ -402,5 +402,5 @@ async def test_completion_log_stream(full_chain, client):
     ]
     assert len(stream_records) >= 1
     r = stream_records[0]
-    assert r["group_id"] == TEST_GROUP_ID
+    assert r["user_id"] == TEST_GROUP_ID
     assert r["model"] == "test-model"

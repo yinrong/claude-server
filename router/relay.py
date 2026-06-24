@@ -4,7 +4,7 @@ Handles WebSocket tunnels from C clients and routes API requests from A
 to the correct group's active tunnel. Merged into X so users only need
 one public server.
 
-Data path: A → X(/g/{group_id}/*) → WS tunnel → C → LLM.
+Data path: A → X(/g/{user_id}/*) → WS tunnel → C → LLM.
 
 WS auth: Cookie _sid={tunnel_secret}.  Lookup group by secret in sqlite.
 Wrong secret → 404 (security: do not reveal whether path exists).
@@ -36,20 +36,20 @@ _ALLOWED_HEADERS = frozenset(
 class MultiTenantRelay:
     def __init__(self, db):
         self._db = db
-        # group_id → active WS from C
+        # user_id → active WS from C
         self.tunnels: dict[str, web.WebSocketResponse] = {}
-        # group_id → {req_id → Future}
+        # user_id → {req_id → Future}
         self.pending: dict[str, dict[str, asyncio.Future]] = {}
-        # group_id → {req_id → Queue}
+        # user_id → {req_id → Queue}
         self.stream_queues: dict[str, dict[str, asyncio.Queue]] = {}
-        # group_id → asyncio.Lock (serialise tunnel replacement)
-        self._group_locks: dict[str, asyncio.Lock] = {}
+        # user_id → asyncio.Lock (serialise tunnel replacement)
+        self._user_locks: dict[str, asyncio.Lock] = {}
 
     # ── helpers ──────────────────────────────────────────────────────────────
-    def _lock(self, group_id: str) -> asyncio.Lock:
-        if group_id not in self._group_locks:
-            self._group_locks[group_id] = asyncio.Lock()
-        return self._group_locks[group_id]
+    def _lock(self, user_id: str) -> asyncio.Lock:
+        if user_id not in self._user_locks:
+            self._user_locks[user_id] = asyncio.Lock()
+        return self._user_locks[user_id]
 
     # ── static pages ─────────────────────────────────────────────────────────
     async def handle_index(self, request: web.Request) -> web.Response:
@@ -67,43 +67,43 @@ class MultiTenantRelay:
         token = next(
             (p.split("=", 1)[1] for p in cookie.split(";") if p.strip().startswith("_sid=")), ""
         )
-        group = xdb.get_group_by_secret(self._db, token)
-        if group is None:
+        user = xdb.get_user_by_secret(self._db, token)
+        if user is None:
             log.warning("Tunnel auth failed from %s (unknown secret)", request.remote)
             raise web.HTTPNotFound()  # 404: do not reveal endpoint existence
 
-        group_id = group["group_id"]
+        user_id = user["user_id"]
         ws = web.WebSocketResponse(heartbeat=None)
         await ws.prepare(request)
-        log.info("Tunnel connected: group=%s from %s", group_id, request.remote)
+        log.info("Tunnel connected: user=%s from %s", user_id, request.remote)
 
-        async with self._lock(group_id):
-            old = self.tunnels.get(group_id)
+        async with self._lock(user_id):
+            old = self.tunnels.get(user_id)
             if old is not None and not old.closed:
                 await old.close()
-            self.tunnels[group_id] = ws
+            self.tunnels[user_id] = ws
 
         try:
             async for msg in ws:
                 if msg.type == aiohttp.WSMsgType.TEXT:
-                    await self._handle_tunnel_msg(group_id, msg.data)
+                    await self._handle_tunnel_msg(user_id, msg.data)
                 elif msg.type == aiohttp.WSMsgType.ERROR:
-                    log.error("Tunnel error group=%s: %s", group_id, ws.exception())
+                    log.error("Tunnel error user=%s: %s", user_id, ws.exception())
         finally:
-            log.info("Tunnel disconnected: group=%s", group_id)
-            async with self._lock(group_id):
-                if self.tunnels.get(group_id) is ws:
-                    del self.tunnels[group_id]
+            log.info("Tunnel disconnected: user=%s", user_id)
+            async with self._lock(user_id):
+                if self.tunnels.get(user_id) is ws:
+                    del self.tunnels[user_id]
             # Fail all pending requests for this group
-            for fut in (self.pending.pop(group_id, {}) or {}).values():
+            for fut in (self.pending.pop(user_id, {}) or {}).values():
                 if not fut.done():
                     fut.set_exception(ConnectionError("tunnel disconnected"))
-            for q in (self.stream_queues.pop(group_id, {}) or {}).values():
+            for q in (self.stream_queues.pop(user_id, {}) or {}).values():
                 await q.put(None)
 
         return ws
 
-    async def _handle_tunnel_msg(self, group_id: str, raw: str) -> None:
+    async def _handle_tunnel_msg(self, user_id: str, raw: str) -> None:
         try:
             msg = json.loads(raw)
         except json.JSONDecodeError:
@@ -111,32 +111,32 @@ class MultiTenantRelay:
 
         msg_type = msg.get("type")
         req_id = msg.get("id")
-        group_pending = self.pending.get(group_id, {})
-        group_queues = self.stream_queues.get(group_id, {})
+        user_pending = self.pending.get(user_id, {})
+        user_queues = self.stream_queues.get(user_id, {})
 
         if msg_type == "pong":
             return
 
-        if msg_type == "response" and req_id in group_pending:
-            fut = group_pending.pop(req_id)
+        if msg_type == "response" and req_id in user_pending:
+            fut = user_pending.pop(req_id)
             if not fut.done():
                 fut.set_result(msg)
 
-        elif msg_type == "stream_chunk" and req_id in group_queues:
-            await group_queues[req_id].put(msg.get("data", ""))
+        elif msg_type == "stream_chunk" and req_id in user_queues:
+            await user_queues[req_id].put(msg.get("data", ""))
 
-        elif msg_type == "stream_end" and req_id in group_queues:
-            await group_queues[req_id].put(None)
+        elif msg_type == "stream_end" and req_id in user_queues:
+            await user_queues[req_id].put(None)
 
     # ── API relay (A → X → C) ────────────────────────────────────────────────
     async def handle_api(self, request: web.Request) -> web.StreamResponse:
         started_at = time.time()
-        group_id = request.match_info.get("group_id", "")
+        user_id = request.match_info.get("user_id", "")
         path = "/" + (request.match_info.get("path", "") or "")
 
-        tunnel = self.tunnels.get(group_id)
+        tunnel = self.tunnels.get(user_id)
         if tunnel is None or tunnel.closed:
-            self._record_audit(group_id, request.method, path, 502, started_at, error_type="no_tunnel")
+            self._record_audit(user_id, request.method, path, 502, started_at, error_type="no_tunnel")
             return web.json_response(
                 {"error": {"message": "service unavailable", "type": "server_error"}},
                 status=502,
@@ -164,31 +164,31 @@ class MultiTenantRelay:
         })
 
         if is_stream:
-            return await self._handle_stream(request, group_id, req_id, tunnel, tunnel_msg, started_at, path)
+            return await self._handle_stream(request, user_id, req_id, tunnel, tunnel_msg, started_at, path)
         else:
-            return await self._handle_normal(request, group_id, req_id, tunnel, tunnel_msg, started_at, path)
+            return await self._handle_normal(request, user_id, req_id, tunnel, tunnel_msg, started_at, path)
 
     async def _handle_normal(
-        self, request: web.Request, group_id: str, req_id: str,
+        self, request: web.Request, user_id: str, req_id: str,
         tunnel: web.WebSocketResponse, tunnel_msg: str, started_at: float, path: str,
     ) -> web.Response:
         loop = asyncio.get_running_loop()
         fut: asyncio.Future = loop.create_future()
-        self.pending.setdefault(group_id, {})[req_id] = fut
+        self.pending.setdefault(user_id, {})[req_id] = fut
 
         try:
             await tunnel.send_str(tunnel_msg)
             result = await asyncio.wait_for(fut, timeout=config.REQUEST_TIMEOUT)
         except asyncio.TimeoutError:
-            self.pending.get(group_id, {}).pop(req_id, None)
-            self._record_audit(group_id, request.method, path, 504, started_at, error_type="timeout")
+            self.pending.get(user_id, {}).pop(req_id, None)
+            self._record_audit(user_id, request.method, path, 504, started_at, error_type="timeout")
             return web.json_response(
                 {"error": {"message": "request timeout", "type": "server_error"}},
                 status=504,
             )
         except Exception as e:
-            self.pending.get(group_id, {}).pop(req_id, None)
-            self._record_audit(group_id, request.method, path, 502, started_at, error_type=type(e).__name__)
+            self.pending.get(user_id, {}).pop(req_id, None)
+            self._record_audit(user_id, request.method, path, 502, started_at, error_type=type(e).__name__)
             return web.json_response(
                 {"error": {"message": str(e), "type": "server_error"}},
                 status=502,
@@ -199,23 +199,23 @@ class MultiTenantRelay:
         resp_headers = result.get("headers", {})
         content_type = resp_headers.get("content-type", "application/json")
 
-        self._record_audit(group_id, request.method, path, status, started_at, upstream_status=status)
+        self._record_audit(user_id, request.method, path, status, started_at, upstream_status=status)
         if isinstance(resp_body, (dict, list)):
             return web.json_response(resp_body, status=status)
         return web.Response(text=str(resp_body), status=status, content_type=content_type)
 
     async def _handle_stream(
-        self, request: web.Request, group_id: str, req_id: str,
+        self, request: web.Request, user_id: str, req_id: str,
         tunnel: web.WebSocketResponse, tunnel_msg: str, started_at: float, path: str,
     ) -> web.StreamResponse:
         queue: asyncio.Queue = asyncio.Queue()
-        self.stream_queues.setdefault(group_id, {})[req_id] = queue
+        self.stream_queues.setdefault(user_id, {})[req_id] = queue
 
         try:
             await tunnel.send_str(tunnel_msg)
         except Exception as e:
-            self.stream_queues.get(group_id, {}).pop(req_id, None)
-            self._record_audit(group_id, request.method, path, 502, started_at, error_type=type(e).__name__)
+            self.stream_queues.get(user_id, {}).pop(req_id, None)
+            self._record_audit(user_id, request.method, path, 502, started_at, error_type=type(e).__name__)
             return web.json_response(
                 {"error": {"message": str(e), "type": "server_error"}},
                 status=502,
@@ -242,21 +242,21 @@ class MultiTenantRelay:
                     break
                 await response.write(chunk.encode() if isinstance(chunk, str) else chunk)
         finally:
-            self.stream_queues.get(group_id, {}).pop(req_id, None)
+            self.stream_queues.get(user_id, {}).pop(req_id, None)
 
-        self._record_audit(group_id, request.method, path, 200, started_at)
+        self._record_audit(user_id, request.method, path, 200, started_at)
         return response
 
     # ── audit (in-process, direct db write) ──────────────────────────────────
     def _record_audit(
-        self, group_id: str, method: str, path: str, status: int, started_at: float,
+        self, user_id: str, method: str, path: str, status: int, started_at: float,
         *, error_type: str | None = None, upstream_status: int | None = None,
     ) -> None:
-        if not group_id:
+        if not user_id:
             return
         try:
             latency_ms = max(0, int((time.time() - started_at) * 1000))
-            xdb.insert_audit_events(self._db, group_id, None, [{
+            xdb.insert_audit_events(self._db, user_id, None, [{
                 "ts": int(time.time()),
                 "method": method,
                 "path": path,

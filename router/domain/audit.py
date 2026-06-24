@@ -6,7 +6,7 @@ from typing import Optional
 @dataclass(frozen=True)
 class AuditEvent:
     ts: int
-    group_id: str
+    user_id: str
     method: str
     path: str
     status: int

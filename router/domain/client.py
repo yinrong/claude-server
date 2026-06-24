@@ -13,7 +13,7 @@ class ClientRole(str, Enum):
 @dataclass(frozen=True)
 class Client:
     client_id: str
-    group_id: str
+    user_id: str
     role: ClientRole
     hostname: Optional[str]
     version: Optional[str]

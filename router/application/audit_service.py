@@ -3,28 +3,28 @@ import time
 from typing import List, Optional
 
 from router.domain.audit import AuditEvent
-from router.infrastructure.repositories.base import AuditRepository, GroupRepository
+from router.infrastructure.repositories.base import AuditRepository, UserRepository
 
 
 class AuditService:
-    def __init__(self, audit_repo: AuditRepository, group_repo: GroupRepository):
+    def __init__(self, audit_repo: AuditRepository, user_repo: UserRepository):
         self._audits = audit_repo
-        self._groups = group_repo
+        self._users = user_repo
 
     def post_events(
         self,
-        group_id: str,
+        user_id: str,
         b_client_id: Optional[str],
         raw_events: List[dict],
     ) -> int:
-        if not self._groups.get(group_id):
-            raise KeyError(f"unknown group_id: {group_id}")
-        events = [self._parse_event(group_id, b_client_id, e) for e in raw_events]
+        if not self._users.get(user_id):
+            raise KeyError(f"unknown user_id: {user_id}")
+        events = [self._parse_event(user_id, b_client_id, e) for e in raw_events]
         return self._audits.insert_many(events)
 
     def record_relay_event(
         self,
-        group_id: str,
+        user_id: str,
         method: str,
         path: str,
         status: int,
@@ -34,13 +34,13 @@ class AuditService:
         upstream_status: Optional[int] = None,
         b_client_id: Optional[str] = None,
     ) -> None:
-        if not group_id:
+        if not user_id:
             return
         try:
             latency_ms = max(0, int((time.time() - started_at) * 1000))
             event = AuditEvent(
                 ts=int(time.time()),
-                group_id=group_id,
+                user_id=user_id,
                 method=method,
                 path=path,
                 status=status,
@@ -55,11 +55,11 @@ class AuditService:
 
     @staticmethod
     def _parse_event(
-        group_id: str, b_client_id: Optional[str], e: dict
+        user_id: str, b_client_id: Optional[str], e: dict
     ) -> AuditEvent:
         return AuditEvent(
             ts=int(e.get("ts", time.time())),
-            group_id=group_id,
+            user_id=user_id,
             b_client_id=b_client_id,
             method=e.get("method", ""),
             path=e.get("path", ""),

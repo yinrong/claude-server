@@ -35,7 +35,7 @@ class TunnelWorker:
 
         if x_client is not None:
             self.x_client: Optional[XClient] = x_client
-        elif settings.group_id:
+        elif settings.user_id:
             self.x_client = XClient(settings)
         else:
             self.x_client = None

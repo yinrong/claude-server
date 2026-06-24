@@ -16,7 +16,7 @@ from .. import scripts as xscripts
 from .. import version as xver
 from router.application.audit_service import AuditService
 from router.application.election_service import ElectionService
-from router.application.group_service import GroupService
+from router.application.user_service import UserService
 from router.application.heartbeat_service import HeartbeatService
 from router.application.registration_service import RegistrationService
 
@@ -35,48 +35,44 @@ async def healthz(request: web.Request) -> web.Response:
     return web.json_response({"ok": True, "version": VERSION})
 
 
-async def create_group(request: web.Request) -> web.Response:
+async def create_user(request: web.Request) -> web.Response:
     try:
         body = await request.json()
     except Exception:
         return _json_error("invalid json", 400)
-    phone = (body.get("phone") or "").strip()
-    suffix = (body.get("suffix") or "").strip()
-    if not phone or not suffix:
-        return _json_error("phone and suffix required", 400)
+    user_id = (body.get("user_id") or "").strip()
+    if not user_id:
+        return _json_error("user_id required", 400)
 
-    svc: GroupService = _services(request)["group"]
+    svc: UserService = _services(request)["user"]
     try:
-        group = svc.create_group(phone, suffix)
+        user = svc.create_user(user_id)
     except ValueError as e:
         if "already exists" in str(e):
             return _json_error(str(e), 409)
         return _json_error(str(e), 400)
     return web.json_response(
         {
-            "group_id": group.group_id.value,
-            "tunnel_secret": group.tunnel_secret,
-            "created_at": group.created_at,
+            "user_id": user.user_id.value,
+            "tunnel_secret": user.tunnel_secret,
+            "created_at": user.created_at,
         },
         status=201,
     )
 
 
-async def list_groups(request: web.Request) -> web.Response:
-    phone = request.query.get("phone")
-    svc: GroupService = _services(request)["group"]
+async def list_users(request: web.Request) -> web.Response:
+    svc: UserService = _services(request)["user"]
     client_repo = _services(request)["client_repo"]
-    groups = svc.list_groups(phone)
+    users = svc.list_users()
     out = []
-    for g in groups:
-        gid = g.group_id.value
-        candidates = client_repo.list_by_group(gid)
+    for g in users:
+        gid = g.user_id.value
+        candidates = client_repo.list_by_user(gid)
         from router.domain.client import ClientRole
         c_clients = [c for c in candidates if c.role == ClientRole.C]
         out.append({
-            "group_id": gid,
-            "phone": g.phone,
-            "suffix": g.suffix,
+            "user_id": gid,
             "tunnel_secret": g.tunnel_secret,
             "created_at": g.created_at,
             "b_addr": g.b_addr,
@@ -85,21 +81,19 @@ async def list_groups(request: web.Request) -> web.Response:
             "c_active_count": sum(1 for c in c_clients if c.is_active),
             "c_total_count": len(c_clients),
         })
-    return web.json_response({"groups": out})
+    return web.json_response({"users": out})
 
 
-async def get_group(request: web.Request) -> web.Response:
-    group_id = request.match_info["group_id"]
-    svc: GroupService = _services(request)["group"]
+async def get_user(request: web.Request) -> web.Response:
+    user_id = request.match_info["user_id"]
+    svc: UserService = _services(request)["user"]
     client_repo = _services(request)["client_repo"]
-    g = svc.get_group(group_id)
+    g = svc.get_user(user_id)
     if not g:
-        return _json_error("group not found", 404)
-    clients = client_repo.list_by_group(group_id)
+        return _json_error("user not found", 404)
+    clients = client_repo.list_by_user(user_id)
     return web.json_response({
-        "group_id": g.group_id.value,
-        "phone": g.phone,
-        "suffix": g.suffix,
+        "user_id": g.user_id.value,
         "tunnel_secret": g.tunnel_secret,
         "created_at": g.created_at,
         "b_addr": g.b_addr,
@@ -125,25 +119,25 @@ async def register_b(request: web.Request) -> web.Response:
         body = await request.json()
     except Exception:
         return _json_error("invalid json", 400)
-    group_id = body.get("group_id") or ""
+    user_id = body.get("user_id") or ""
     client_id = body.get("client_id") or ""
     public_addr = body.get("public_addr") or ""
     port = int(body.get("port") or 0)
     version = body.get("version") or ""
     hostname = body.get("hostname") or ""
-    if not (group_id and client_id):
-        return _json_error("group_id and client_id required", 400)
+    if not (user_id and client_id):
+        return _json_error("user_id and client_id required", 400)
 
     svc: RegistrationService = _services(request)["registration"]
     cfg = request.app["config"]
     try:
         result = svc.register_b(
-            group_id, client_id,
+            user_id, client_id,
             public_addr=public_addr, port=port,
             version=version, hostname=hostname,
         )
     except KeyError:
-        return _json_error("unknown group_id", 404)
+        return _json_error("unknown user_id", 404)
     return web.json_response({
         "tunnel_secret": result["tunnel_secret"],
         "heartbeat_interval": cfg["heartbeat_interval"],
@@ -155,21 +149,21 @@ async def register_c(request: web.Request) -> web.Response:
         body = await request.json()
     except Exception:
         return _json_error("invalid json", 400)
-    group_id = body.get("group_id") or ""
+    user_id = body.get("user_id") or ""
     client_id = body.get("client_id") or ""
     version = body.get("version") or ""
     hostname = body.get("hostname") or ""
-    if not (group_id and client_id):
-        return _json_error("group_id and client_id required", 400)
+    if not (user_id and client_id):
+        return _json_error("user_id and client_id required", 400)
 
     svc: RegistrationService = _services(request)["registration"]
     cfg = request.app["config"]
     try:
         result = svc.register_c(
-            group_id, client_id, version=version, hostname=hostname,
+            user_id, client_id, version=version, hostname=hostname,
         )
     except KeyError:
-        return _json_error("unknown group_id", 404)
+        return _json_error("unknown user_id", 404)
     return web.json_response({
         "relay_addr": result["relay_addr"],
         "relay_port": result["relay_port"],
@@ -195,7 +189,7 @@ async def heartbeat(request: web.Request) -> web.Response:
 
 
 async def elect(request: web.Request) -> web.Response:
-    group_id = request.match_info["group_id"]
+    user_id = request.match_info["user_id"]
     try:
         body = await request.json()
     except Exception:
@@ -205,7 +199,7 @@ async def elect(request: web.Request) -> web.Response:
         return _json_error("client_id required", 400)
     svc: ElectionService = _services(request)["election"]
     poll = request.app["config"]["election_poll"]
-    result = svc.claim_active(group_id, client_id, election_poll=poll)
+    result = svc.claim_active(user_id, client_id, election_poll=poll)
     if result.get("error"):
         return _json_error(result["error"], 404)
     return web.json_response(result)
@@ -216,18 +210,18 @@ async def post_audit(request: web.Request) -> web.Response:
         body = await request.json()
     except Exception:
         return _json_error("invalid json", 400)
-    group_id = body.get("group_id") or ""
+    user_id = body.get("user_id") or ""
     b_client_id = body.get("b_client_id") or None
     events = body.get("events") or []
-    if not group_id:
-        return _json_error("group_id required", 400)
+    if not user_id:
+        return _json_error("user_id required", 400)
     if not isinstance(events, list):
         return _json_error("events must be a list", 400)
     svc: AuditService = _services(request)["audit"]
     try:
-        n = svc.post_events(group_id, b_client_id, events)
+        n = svc.post_events(user_id, b_client_id, events)
     except KeyError:
-        return _json_error("unknown group_id", 404)
+        return _json_error("unknown user_id", 404)
     return web.json_response({"accepted": n})
 
 
@@ -263,7 +257,7 @@ def _render_install(name: str, request: web.Request) -> str:
     return xscripts.render(
         name,
         X_BASE_URL_DEFAULT=base,
-        GROUP_ID_DEFAULT=request.query.get("group_id", ""),
+        GROUP_ID_DEFAULT=request.query.get("user_id", ""),
     )
 
 

@@ -30,10 +30,10 @@ class InMemoryClientRepository(ClientRepository):
     def get(self, client_id: str) -> Optional[Client]:
         return self._store.get(client_id)
 
-    def list_by_group(
-        self, group_id: str, role: Optional[ClientRole] = None
+    def list_by_user(
+        self, user_id: str, role: Optional[ClientRole] = None
     ) -> List[Client]:
-        clients = [c for c in self._store.values() if c.group_id == group_id]
+        clients = [c for c in self._store.values() if c.user_id == user_id]
         if role:
             clients = [c for c in clients if c.role == role]
         return clients
@@ -46,19 +46,19 @@ class InMemoryClientRepository(ClientRepository):
             self._store[client_id] = replace(c, last_heartbeat=ts)
             return True
 
-    def set_active(self, group_id: str, winner_id: str, winner_since: int) -> None:
+    def set_active(self, user_id: str, winner_id: str, winner_since: int) -> None:
         with self._lock:
             c = self._store.get(winner_id)
-            if c and c.group_id == group_id:
+            if c and c.user_id == user_id:
                 self._store[winner_id] = replace(c, is_active=True, active_since=winner_since)
 
-    def clear_active(self, group_id: str) -> None:
+    def clear_active(self, user_id: str) -> None:
         with self._lock:
             for cid, c in list(self._store.items()):
-                if c.group_id == group_id and c.is_active:
+                if c.user_id == user_id and c.is_active:
                     self._store[cid] = replace(c, is_active=False, active_since=None)
 
-    def get_candidates(self, group_id: str) -> List[CandidateSnapshot]:
+    def get_candidates(self, user_id: str) -> List[CandidateSnapshot]:
         return [
             CandidateSnapshot(
                 client_id=c.client_id,
@@ -68,5 +68,5 @@ class InMemoryClientRepository(ClientRepository):
                 active_since=c.active_since,
             )
             for c in self._store.values()
-            if c.group_id == group_id and c.role == ClientRole.C
+            if c.user_id == user_id and c.role == ClientRole.C
         ]

@@ -33,7 +33,7 @@ async def healthz(request: web.Request) -> web.Response:
     return web.json_response({"ok": True, "version": VERSION})
 
 
-async def create_group(request: web.Request) -> web.Response:
+async def create_user(request: web.Request) -> web.Response:
     try:
         body = await request.json()
     except Exception:
@@ -45,7 +45,7 @@ async def create_group(request: web.Request) -> web.Response:
 
     conn: sqlite3.Connection = request.app["db"]
     try:
-        info = xdb.create_group(conn, phone, suffix)
+        info = xdb.create_user(conn, phone, suffix)
     except ValueError as e:
         if "already exists" in str(e):
             return _json_error(str(e), 409)
@@ -53,22 +53,22 @@ async def create_group(request: web.Request) -> web.Response:
     return web.json_response(info, status=201)
 
 
-async def list_groups(request: web.Request) -> web.Response:
+async def list_users(request: web.Request) -> web.Response:
     phone = request.query.get("phone")
     conn: sqlite3.Connection = request.app["db"]
-    groups = xdb.list_groups_by_phone(conn, phone)
-    return web.json_response({"groups": groups})
+    users = xdb.list_users_by_phone(conn, phone)
+    return web.json_response({"users": users})
 
 
-async def get_group(request: web.Request) -> web.Response:
-    group_id = request.match_info["group_id"]
+async def get_user(request: web.Request) -> web.Response:
+    user_id = request.match_info["user_id"]
     conn: sqlite3.Connection = request.app["db"]
-    g = xdb.get_group(conn, group_id)
+    g = xdb.get_user(conn, user_id)
     if not g:
-        return _json_error("group not found", 404)
+        return _json_error("user not found", 404)
     clients = conn.execute(
-        "SELECT client_id, role, hostname, version, registered_at, last_heartbeat, is_active FROM clients WHERE group_id=?",
-        (group_id,),
+        "SELECT client_id, role, hostname, version, registered_at, last_heartbeat, is_active FROM clients WHERE user_id=?",
+        (user_id,),
     ).fetchall()
     g["clients"] = [dict(r) for r in clients]
     return web.json_response(g)
@@ -79,26 +79,26 @@ async def register_b(request: web.Request) -> web.Response:
         body = await request.json()
     except Exception:
         return _json_error("invalid json", 400)
-    group_id = body.get("group_id") or ""
+    user_id = body.get("user_id") or ""
     client_id = body.get("client_id") or ""
     public_addr = body.get("public_addr") or ""
     port = int(body.get("port") or 0)
     version = body.get("version") or ""
     hostname = body.get("hostname") or ""
-    if not (group_id and client_id):
-        return _json_error("group_id and client_id required", 400)
+    if not (user_id and client_id):
+        return _json_error("user_id and client_id required", 400)
 
     conn: sqlite3.Connection = request.app["db"]
-    g = xdb.get_group(conn, group_id)
+    g = xdb.get_user(conn, user_id)
     if not g:
-        return _json_error("unknown group_id", 404)
+        return _json_error("unknown user_id", 404)
 
     try:
-        xdb.upsert_client(conn, client_id=client_id, group_id=group_id, role="B", hostname=hostname, version=version)
+        xdb.upsert_client(conn, client_id=client_id, user_id=user_id, role="B", hostname=hostname, version=version)
     except ValueError as e:
         return _json_error(str(e), 400)
     if public_addr and port:
-        xdb.update_b_addr(conn, group_id, public_addr, port)
+        xdb.update_b_addr(conn, user_id, public_addr, port)
     return web.json_response({
         "tunnel_secret": g["tunnel_secret"],
         "heartbeat_interval": request.app["config"]["heartbeat_interval"],
@@ -110,19 +110,19 @@ async def register_c(request: web.Request) -> web.Response:
         body = await request.json()
     except Exception:
         return _json_error("invalid json", 400)
-    group_id = body.get("group_id") or ""
+    user_id = body.get("user_id") or ""
     client_id = body.get("client_id") or ""
     version = body.get("version") or ""
     hostname = body.get("hostname") or ""
-    if not (group_id and client_id):
-        return _json_error("group_id and client_id required", 400)
+    if not (user_id and client_id):
+        return _json_error("user_id and client_id required", 400)
 
     conn: sqlite3.Connection = request.app["db"]
-    g = xdb.get_group(conn, group_id)
+    g = xdb.get_user(conn, user_id)
     if not g:
-        return _json_error("unknown group_id", 404)
+        return _json_error("unknown user_id", 404)
     try:
-        xdb.upsert_client(conn, client_id=client_id, group_id=group_id, role="C", hostname=hostname, version=version)
+        xdb.upsert_client(conn, client_id=client_id, user_id=user_id, role="C", hostname=hostname, version=version)
     except ValueError as e:
         return _json_error(str(e), 400)
     return web.json_response({
@@ -150,7 +150,7 @@ async def heartbeat(request: web.Request) -> web.Response:
 
 
 async def elect(request: web.Request) -> web.Response:
-    group_id = request.match_info["group_id"]
+    user_id = request.match_info["user_id"]
     try:
         body = await request.json()
     except Exception:
@@ -160,7 +160,7 @@ async def elect(request: web.Request) -> web.Response:
         return _json_error("client_id required", 400)
     conn: sqlite3.Connection = request.app["db"]
     poll = request.app["config"]["election_poll"]
-    result = xelection.claim_active(conn, group_id, client_id, election_poll=poll)
+    result = xelection.claim_active(conn, user_id, client_id, election_poll=poll)
     if result.get("error"):
         return _json_error(result["error"], 404)
     return web.json_response(result)
@@ -171,17 +171,17 @@ async def post_audit(request: web.Request) -> web.Response:
         body = await request.json()
     except Exception:
         return _json_error("invalid json", 400)
-    group_id = body.get("group_id") or ""
+    user_id = body.get("user_id") or ""
     b_client_id = body.get("b_client_id") or ""
     events = body.get("events") or []
-    if not group_id:
-        return _json_error("group_id required", 400)
+    if not user_id:
+        return _json_error("user_id required", 400)
     if not isinstance(events, list):
         return _json_error("events must be a list", 400)
     conn: sqlite3.Connection = request.app["db"]
-    if not xdb.get_group(conn, group_id):
-        return _json_error("unknown group_id", 404)
-    n = xdb.insert_audit_events(conn, group_id, b_client_id, events)
+    if not xdb.get_user(conn, user_id):
+        return _json_error("unknown user_id", 404)
+    n = xdb.insert_audit_events(conn, user_id, b_client_id, events)
     return web.json_response({"accepted": n})
 
 
@@ -217,7 +217,7 @@ def _render_install(name: str, request: web.Request) -> str:
     return xscripts.render(
         name,
         X_BASE_URL_DEFAULT=base,
-        GROUP_ID_DEFAULT=request.query.get("group_id", ""),
+        GROUP_ID_DEFAULT=request.query.get("user_id", ""),
     )
 
 
@@ -261,13 +261,13 @@ def create_app(*, db_path: str, releases_dir: str, x_base_url: str = "",
 
     # Control-plane endpoints
     app.router.add_get("/healthz", healthz)
-    app.router.add_post("/api/groups", create_group)
-    app.router.add_get("/api/groups", list_groups)
-    app.router.add_get(r"/api/groups/{group_id}", get_group)
+    app.router.add_post("/api/users", create_user)
+    app.router.add_get("/api/users", list_users)
+    app.router.add_get(r"/api/users/{user_id}", get_user)
     app.router.add_post("/api/register/b", register_b)
     app.router.add_post("/api/register/c", register_c)
     app.router.add_post("/api/heartbeat", heartbeat)
-    app.router.add_post(r"/api/elect/{group_id}", elect)
+    app.router.add_post(r"/api/elect/{user_id}", elect)
     app.router.add_post("/api/audit", post_audit)
     app.router.add_get(r"/api/version/{role}", get_version)
     app.router.add_get(r"/api/download/{role}/{version}", download_release)
@@ -278,7 +278,7 @@ def create_app(*, db_path: str, releases_dir: str, x_base_url: str = "",
 
     # Data-plane endpoints (relay: C tunnel + A API calls)
     app.router.add_get("/ws/notifications", relay.handle_websocket)
-    app.router.add_route("*", r"/g/{group_id}/{path:.*}", relay.handle_api)
+    app.router.add_route("*", r"/g/{user_id}/{path:.*}", relay.handle_api)
 
     # Catch-all static page (must be last)
     app.router.add_route("*", r"/{path:.*}", relay.handle_catch_all)

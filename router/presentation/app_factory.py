@@ -10,13 +10,13 @@ from .. import db as xdb
 from router.application.audit_service import AuditService
 from router.application.completion_service import CompletionService
 from router.application.election_service import ElectionService
-from router.application.group_service import GroupService
+from router.application.user_service import UserService
 from router.application.heartbeat_service import HeartbeatService
 from router.application.registration_service import RegistrationService
 from router.infrastructure.repositories.jsonl_completion_repo import JsonlCompletionRepository
 from router.infrastructure.repositories.sqlite_audit_repo import SqliteAuditRepository
 from router.infrastructure.repositories.sqlite_client_repo import SqliteClientRepository
-from router.infrastructure.repositories.sqlite_group_repo import SqliteGroupRepository
+from router.infrastructure.repositories.sqlite_user_repo import SqliteUserRepository
 from router.presentation import handlers as h
 from router.relay.multi_tenant import MultiTenantRelay
 
@@ -36,28 +36,28 @@ def create_app(
 
     # Infrastructure
     conn = xdb.connect(db_path)
-    group_repo = SqliteGroupRepository(conn)
+    user_repo = SqliteUserRepository(conn)
     client_repo = SqliteClientRepository(conn)
     audit_repo = SqliteAuditRepository(conn)
 
     # Application services
-    group_svc = GroupService(group_repo)
-    reg_svc = RegistrationService(group_repo, client_repo)
+    user_svc = UserService(user_repo)
+    reg_svc = RegistrationService(user_repo, client_repo, user_svc=user_svc)
     hb_svc = HeartbeatService(client_repo)
-    elect_svc = ElectionService(client_repo, group_repo)
-    audit_svc = AuditService(audit_repo, group_repo)
+    elect_svc = ElectionService(client_repo, user_repo)
+    audit_svc = AuditService(audit_repo, user_repo)
     completion_svc = CompletionService(JsonlCompletionRepository(completions_dir))
 
     # Data-plane relay
     relay = MultiTenantRelay(
-        group_repo=group_repo,
+        user_repo=user_repo,
         audit_service=audit_svc,
         completion_service=completion_svc,
     )
 
     app = web.Application()
     app["services"] = {
-        "group": group_svc,
+        "user": user_svc,
         "registration": reg_svc,
         "heartbeat": hb_svc,
         "election": elect_svc,
@@ -78,13 +78,13 @@ def create_app(
 
     # Control-plane endpoints
     app.router.add_get("/healthz", h.healthz)
-    app.router.add_post("/api/groups", h.create_group)
-    app.router.add_get("/api/groups", h.list_groups)
-    app.router.add_get(r"/api/groups/{group_id}", h.get_group)
+    app.router.add_post("/api/users", h.create_user)
+    app.router.add_get("/api/users", h.list_users)
+    app.router.add_get(r"/api/users/{user_id}", h.get_user)
     app.router.add_post("/api/register/b", h.register_b)
     app.router.add_post("/api/register/c", h.register_c)
     app.router.add_post("/api/heartbeat", h.heartbeat)
-    app.router.add_post(r"/api/elect/{group_id}", h.elect)
+    app.router.add_post(r"/api/elect/{user_id}", h.elect)
     app.router.add_post("/api/audit", h.post_audit)
     app.router.add_get(r"/api/version/{role}", h.get_version)
     app.router.add_get(r"/api/download/{role}/{version}", h.download_release)
@@ -95,7 +95,7 @@ def create_app(
 
     # Data-plane endpoints
     app.router.add_get("/ws/notifications", relay.handle_websocket)
-    app.router.add_route("*", r"/g/{group_id}/{path:.*}", relay.handle_api)
+    app.router.add_route("*", r"/g/{user_id}/{path:.*}", relay.handle_api)
 
     # Catch-all camouflage (must be last)
     app.router.add_route("*", r"/{path:.*}", relay.handle_catch_all)

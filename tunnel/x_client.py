@@ -45,10 +45,10 @@ class XClient:
         if new_settings:
             self._settings = new_settings
         else:
-            cached = ccache.load(self._settings.cache_dir, self._settings.group_id)
+            cached = ccache.load(self._settings.cache_dir, self._settings.user_id)
             if cached:
                 self._settings = self._settings.with_tunnel_secret(cached)
-                log.info("Loaded cached tunnel_secret for %s", self._settings.group_id)
+                log.info("Loaded cached tunnel_secret for %s", self._settings.user_id)
         self._tasks.append(asyncio.create_task(self._election_loop()))
         self._tasks.append(asyncio.create_task(self._heartbeat_loop()))
         self._tasks.append(asyncio.create_task(self._self_update_loop()))
@@ -69,14 +69,14 @@ class XClient:
             self.session = None
 
     async def register(self) -> Optional[CSettings]:
-        if not self._settings.group_id:
+        if not self._settings.user_id:
             log.warning("GROUP_ID not configured, skipping X registration")
             return None
         try:
             async with self.session.post(
                 f"{self._settings.x_base_url}/api/register/c",
                 json={
-                    "group_id": self._settings.group_id,
+                    "user_id": self._settings.user_id,
                     "client_id": self._settings.client_id,
                     "version": self._settings.version,
                     "hostname": socket.gethostname(),
@@ -93,8 +93,8 @@ class XClient:
 
         new_secret = body.get("tunnel_secret") or self._settings.tunnel_secret
         new_settings = self._settings.with_tunnel_secret(new_secret)
-        ccache.save(new_settings.cache_dir, new_settings.group_id, new_secret)
-        log.info("Registered with X (group=%s)", self._settings.group_id)
+        ccache.save(new_settings.cache_dir, new_settings.user_id, new_secret)
+        log.info("Registered with X (user=%s)", self._settings.user_id)
         return new_settings
 
     async def _election_loop(self) -> None:
@@ -107,12 +107,12 @@ class XClient:
             pass
 
     async def _claim_active_once(self) -> None:
-        if not self._settings.group_id:
+        if not self._settings.user_id:
             self.should_be_active.set()
             return
         try:
             async with self.session.post(
-                f"{self._settings.x_base_url}/api/elect/{self._settings.group_id}",
+                f"{self._settings.x_base_url}/api/elect/{self._settings.user_id}",
                 json={"client_id": self._settings.client_id},
                 timeout=aiohttp.ClientTimeout(total=5),
             ) as resp:
@@ -128,7 +128,7 @@ class XClient:
 
         if body.get("active"):
             if not self.should_be_active.is_set():
-                log.info("Elected ACTIVE (group=%s)", self._settings.group_id)
+                log.info("Elected ACTIVE (user=%s)", self._settings.user_id)
             self.should_be_active.set()
         else:
             if self.should_be_active.is_set():
@@ -147,7 +147,7 @@ class XClient:
                         json={
                             "client_id": self._settings.client_id,
                             "role": "C",
-                            "group_id": self._settings.group_id,
+                            "user_id": self._settings.user_id,
                         },
                         timeout=aiohttp.ClientTimeout(total=5),
                     ) as resp:

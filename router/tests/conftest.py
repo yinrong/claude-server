@@ -33,9 +33,7 @@ for _name in list(sys.modules):
 sys.modules['x'] = _router_pkg
 
 TEST_TUNNEL_SECRET = "tun-test-secret-for-e2e"
-TEST_GROUP_ID = "13800138000_test"
-TEST_PHONE = "13800138000"
-TEST_SUFFIX = "test"
+TEST_GROUP_ID = "test-host"
 
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -49,11 +47,11 @@ def _free_port() -> int:
 
 
 def _setup_env(*, mock_llm_port: int, x_port: int, llmrouter_home: str,
-               group_id: str = TEST_GROUP_ID):
+               user_id: str = TEST_GROUP_ID):
     os.environ["INTERNAL_LLM_BASE"] = f"http://127.0.0.1:{mock_llm_port}"
     # X_BASE_URL tells C where to connect (plain HTTP in tests → ws:// WS)
     os.environ["X_BASE_URL"] = f"http://127.0.0.1:{x_port}"
-    os.environ["GROUP_ID"] = group_id
+    os.environ["GROUP_ID"] = user_id
     os.environ["LLMROUTER_HOME"] = llmrouter_home
     os.environ["X_HEARTBEAT_INTERVAL"] = "30"
     os.environ["X_AUDIT_BATCH_INTERVAL"] = "1"
@@ -100,23 +98,22 @@ async def mock_llm():
     await runner.cleanup()
 
 
-def _seed_test_group(app, group_id=TEST_GROUP_ID, tunnel_secret=TEST_TUNNEL_SECRET):
-    from x.application.group_service import GroupService
-    svc: GroupService = app["services"]["group"]
-    if svc.get_group(group_id) is None:
-        phone, suffix = group_id.split("_", 1)
-        svc.create_group(phone, suffix, tunnel_secret=tunnel_secret)
+def _seed_test_group(app, user_id=TEST_GROUP_ID, tunnel_secret=TEST_TUNNEL_SECRET):
+    from x.application.user_service import UserService
+    svc: UserService = app["services"]["user"]
+    if svc.get_user(user_id) is None:
+        svc.create_user(user_id, tunnel_secret=tunnel_secret)
 
 
-def _seed_c_client_active(app, group_id, client_id):
+def _seed_c_client_active(app, user_id, client_id):
     from x.application.registration_service import RegistrationService
     from x.infrastructure.repositories.sqlite_client_repo import SqliteClientRepository
     reg_svc: RegistrationService = app["services"]["registration"]
     client_repo: SqliteClientRepository = app["services"]["client_repo"]
-    reg_svc.register_c(group_id, client_id, hostname="test", version="0.0.1")
+    reg_svc.register_c(user_id, client_id, hostname="test", version="0.0.1")
     # 使用 SqliteClientRepository 的测试辅助方法强制设置 active
     import time
-    client_repo.force_active_for_test(group_id, client_id, int(time.time()))
+    client_repo.force_active_for_test(user_id, client_id, int(time.time()))
 
 
 @pytest_asyncio.fixture(scope="session")
@@ -124,7 +121,7 @@ async def x_server(mock_llm):
     """Unified X+relay server running as plain HTTP.
 
     Replaces the old separate `relay` fixture.  Serves both control-plane
-    (/api/*, /install/*) and data-plane (/ws/notifications, /g/{group_id}/*).
+    (/api/*, /install/*) and data-plane (/ws/notifications, /g/{user_id}/*).
     """
     tmp_home = tempfile.mkdtemp(prefix="llmrouter-test-")
     db_path = os.path.join(tmp_home, "data", "x.sqlite")
@@ -132,7 +129,7 @@ async def x_server(mock_llm):
     os.makedirs(os.path.dirname(db_path), exist_ok=True)
     os.makedirs(releases_dir, exist_ok=True)
 
-    from x.server import create_app
+    from x.presentation.app_factory import create_app
     port = _free_port()
     app = create_app(
         db_path=db_path,
@@ -181,12 +178,12 @@ async def tunnel(x_server, mock_llm):
     # Ensure C client is marked active before the WS connection attempt.
     _seed_c_client_active(x_server["app"], TEST_GROUP_ID, os.environ["CLIENT_ID_C"])
 
-    from c.settings import CSettings
-    from c.tunnel_worker import TunnelWorker
+    from tunnel.settings import CSettings
+    from tunnel.tunnel_worker import TunnelWorker
 
     settings = CSettings(
         x_base_url=x_server["url"],
-        group_id=TEST_GROUP_ID,
+        user_id=TEST_GROUP_ID,
         client_id=os.environ["CLIENT_ID_C"],
         tunnel_secret=TEST_TUNNEL_SECRET,
         internal_llm_base=f"http://127.0.0.1:{mock_llm['port']}",
@@ -234,7 +231,7 @@ async def full_chain(x_server, mock_llm, tunnel):
 
 @pytest_asyncio.fixture
 async def client(x_server):
-    """Plain HTTP client for calling A→X relay endpoints (/g/{group_id}/...)."""
+    """Plain HTTP client for calling A→X relay endpoints (/g/{user_id}/...)."""
     session = aiohttp.ClientSession()
     yield session
     await session.close()

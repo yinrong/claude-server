@@ -18,15 +18,15 @@ class SqliteClientRepository(ClientRepository):
         ).fetchone()
         if existing:
             self._conn.execute(
-                "UPDATE clients SET group_id=?, role=?, hostname=?, version=?, last_heartbeat=? WHERE client_id=?",
-                (client.group_id, client.role.value, client.hostname, client.version,
+                "UPDATE clients SET user_id=?, role=?, hostname=?, version=?, last_heartbeat=? WHERE client_id=?",
+                (client.user_id, client.role.value, client.hostname, client.version,
                  client.last_heartbeat, client.client_id),
             )
         else:
             self._conn.execute(
-                "INSERT INTO clients (client_id, group_id, role, hostname, version, registered_at, last_heartbeat) "
+                "INSERT INTO clients (client_id, user_id, role, hostname, version, registered_at, last_heartbeat) "
                 "VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (client.client_id, client.group_id, client.role.value,
+                (client.client_id, client.user_id, client.role.value,
                  client.hostname, client.version, client.registered_at, client.last_heartbeat),
             )
         row = self._conn.execute(
@@ -40,17 +40,17 @@ class SqliteClientRepository(ClientRepository):
         ).fetchone()
         return self._row_to_client(row) if row else None
 
-    def list_by_group(
-        self, group_id: str, role: Optional[ClientRole] = None
+    def list_by_user(
+        self, user_id: str, role: Optional[ClientRole] = None
     ) -> List[Client]:
         if role:
             rows = self._conn.execute(
-                "SELECT * FROM clients WHERE group_id=? AND role=?",
-                (group_id, role.value),
+                "SELECT * FROM clients WHERE user_id=? AND role=?",
+                (user_id, role.value),
             ).fetchall()
         else:
             rows = self._conn.execute(
-                "SELECT * FROM clients WHERE group_id=?", (group_id,)
+                "SELECT * FROM clients WHERE user_id=?", (user_id,)
             ).fetchall()
         return [self._row_to_client(row) for row in rows]
 
@@ -60,23 +60,23 @@ class SqliteClientRepository(ClientRepository):
         )
         return cur.rowcount > 0
 
-    def set_active(self, group_id: str, winner_id: str, winner_since: int) -> None:
+    def set_active(self, user_id: str, winner_id: str, winner_since: int) -> None:
         self._conn.execute(
-            "UPDATE clients SET is_active=1, active_since=? WHERE client_id=? AND group_id=?",
-            (winner_since, winner_id, group_id),
+            "UPDATE clients SET is_active=1, active_since=? WHERE client_id=? AND user_id=?",
+            (winner_since, winner_id, user_id),
         )
 
-    def clear_active(self, group_id: str) -> None:
+    def clear_active(self, user_id: str) -> None:
         self._conn.execute(
-            "UPDATE clients SET is_active=0, active_since=NULL WHERE group_id=? AND is_active=1",
-            (group_id,),
+            "UPDATE clients SET is_active=0, active_since=NULL WHERE user_id=? AND is_active=1",
+            (user_id,),
         )
 
-    def get_candidates(self, group_id: str) -> List[CandidateSnapshot]:
+    def get_candidates(self, user_id: str) -> List[CandidateSnapshot]:
         rows = self._conn.execute(
             "SELECT client_id, last_heartbeat, registered_at, is_active, active_since "
-            "FROM clients WHERE group_id=? AND role='C'",
-            (group_id,),
+            "FROM clients WHERE user_id=? AND role='C'",
+            (user_id,),
         ).fetchall()
         return [
             CandidateSnapshot(
@@ -89,10 +89,10 @@ class SqliteClientRepository(ClientRepository):
             for row in rows
         ]
 
-    def force_active_for_test(self, group_id: str, winner_id: str, winner_since: int) -> None:
+    def force_active_for_test(self, user_id: str, winner_id: str, winner_since: int) -> None:
         """仅供测试使用：强制设置 active 状态，绕过选主逻辑。"""
         self._conn.execute(
-            "UPDATE clients SET is_active=0, active_since=NULL WHERE group_id=?", (group_id,)
+            "UPDATE clients SET is_active=0, active_since=NULL WHERE user_id=?", (user_id,)
         )
         self._conn.execute(
             "UPDATE clients SET is_active=1, active_since=? WHERE client_id=?",
@@ -103,7 +103,7 @@ class SqliteClientRepository(ClientRepository):
     def _row_to_client(row: sqlite3.Row) -> Client:
         return Client(
             client_id=row["client_id"],
-            group_id=row["group_id"],
+            user_id=row["user_id"],
             role=ClientRole(row["role"]),
             hostname=row["hostname"],
             version=row["version"],

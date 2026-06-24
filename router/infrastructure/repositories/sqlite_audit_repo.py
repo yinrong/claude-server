@@ -15,14 +15,14 @@ class SqliteAuditRepository(AuditRepository):
             return 0
         rows = [
             (
-                e.ts, e.group_id, e.b_client_id,
+                e.ts, e.user_id, e.b_client_id,
                 e.method, e.path, e.status, e.latency_ms,
                 e.upstream_status, e.error_type,
             )
             for e in events
         ]
         self._conn.executemany(
-            "INSERT INTO audit_log (ts, group_id, b_client_id, method, path, status, "
+            "INSERT INTO audit_log (ts, user_id, b_client_id, method, path, status, "
             "latency_ms, upstream_status, error_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
             rows,
         )

@@ -16,7 +16,7 @@ import pytest
 import pytest_asyncio
 from aiohttp import web
 
-TEST_GROUP_ID = "13800138000_test"
+TEST_GROUP_ID = "stability-host"
 TEST_TUNNEL_SECRET = "tun-test-secret-for-e2e"
 
 
@@ -36,8 +36,7 @@ async def _start_x(db_path: str, releases_dir: str, port: int, mock_llm_port: in
     We only seed the group (for WS auth); no election setup needed since
     stability tests use GROUP_ID='' (no XClient, always-active event).
     """
-    from x.server import create_app
-    from x import db as xdb
+    from x.presentation.app_factory import create_app
 
     os.makedirs(os.path.dirname(db_path), exist_ok=True)
     os.makedirs(releases_dir, exist_ok=True)
@@ -49,10 +48,9 @@ async def _start_x(db_path: str, releases_dir: str, port: int, mock_llm_port: in
         heartbeat_interval=30,
         election_poll=1,
     )
-    conn = app["db"]
-
-    if xdb.get_group(conn, TEST_GROUP_ID) is None:
-        xdb.create_group(conn, "13800138000", "test", tunnel_secret=TEST_TUNNEL_SECRET)
+    user_svc = app["services"]["group"]
+    if user_svc.get_user(TEST_GROUP_ID) is None:
+        user_svc.create_user(TEST_GROUP_ID, tunnel_secret=TEST_TUNNEL_SECRET)
 
     runner = web.AppRunner(app)
     await runner.setup()

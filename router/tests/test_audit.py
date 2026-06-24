@@ -4,30 +4,30 @@ import asyncio
 import sqlite3
 import time
 
-TEST_GROUP_ID = "13800138000_test"
+TEST_GROUP_ID = "test-host"
 
 
-def _read_audit_rows(db_path, group_id):
+def _read_audit_rows(db_path, user_id):
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     try:
         rows = conn.execute(
-            "SELECT method, path, status, latency_ms FROM audit_log WHERE group_id=? ORDER BY id",
-            (group_id,),
+            "SELECT method, path, status, latency_ms FROM audit_log WHERE user_id=? ORDER BY id",
+            (user_id,),
         ).fetchall()
         return [dict(r) for r in rows]
     finally:
         conn.close()
 
 
-async def _wait_for_audit(db_path, group_id, *, predicate, timeout=2.0):
+async def _wait_for_audit(db_path, user_id, *, predicate, timeout=2.0):
     deadline = time.time() + timeout
     while time.time() < deadline:
-        rows = _read_audit_rows(db_path, group_id)
+        rows = _read_audit_rows(db_path, user_id)
         if any(predicate(r) for r in rows):
             return rows
         await asyncio.sleep(0.2)
-    return _read_audit_rows(db_path, group_id)
+    return _read_audit_rows(db_path, user_id)
 
 
 async def test_audit_e2e_normal_request(full_chain, client):
@@ -88,12 +88,11 @@ async def test_audit_e2e_no_tunnel_502(x_server, client):
 
 async def test_audit_direct_post(x_server, http_client):
     """Pure X-side test: create a unique group, POST two audit events, verify ordering in sqlite."""
-    phone, suffix = "13903000001", "direct"
-    group_id = f"{phone}_{suffix}"
+    user_id = "audit-direct-host"
 
     async with http_client.post(
-        f"{x_server['url']}/api/groups",
-        json={"phone": phone, "suffix": suffix},
+        f"{x_server['url']}/api/users",
+        json={"user_id": user_id},
     ) as resp:
         assert resp.status == 201
 
@@ -103,13 +102,13 @@ async def test_audit_direct_post(x_server, http_client):
     ]
     async with http_client.post(
         f"{x_server['url']}/api/audit",
-        json={"group_id": group_id, "b_client_id": "b-direct", "events": events},
+        json={"user_id": user_id, "b_client_id": "b-direct", "events": events},
     ) as resp:
         assert resp.status == 200
         body = await resp.json()
         assert body == {"accepted": 2}
 
-    rows = _read_audit_rows(x_server["db_path"], group_id)
+    rows = _read_audit_rows(x_server["db_path"], user_id)
     assert len(rows) == 2
     assert rows[0]["method"] == "GET"
     assert rows[0]["path"] == "/v1/models"

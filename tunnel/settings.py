@@ -15,7 +15,7 @@ from urllib.parse import urlparse
 @dataclass(frozen=True)
 class CSettings:
     x_base_url: str
-    group_id: str
+    user_id: str
     client_id: str
     tunnel_secret: str
     internal_llm_base: str
@@ -41,7 +41,7 @@ class CSettings:
         """Return a new CSettings with an updated tunnel_secret (immutable update)."""
         return CSettings(
             x_base_url=self.x_base_url,
-            group_id=self.group_id,
+            user_id=self.user_id,
             client_id=self.client_id,
             tunnel_secret=secret,
             internal_llm_base=self.internal_llm_base,
@@ -62,15 +62,18 @@ class CSettings:
     def from_env(cls) -> "CSettings":
         """Construct from environment variables via config module (called once at startup)."""
         import os
+        import socket
         import config  # noqa — only used at process startup
         config.ROLE = "C"
         client_id = (
             os.environ.get("CLIENT_ID_C")
             or config.load_or_create_client_id()
         )
+        # TUNNEL_HOST defaults to machine hostname if not set
+        user_id = config.GROUP_ID or os.environ.get("TUNNEL_HOST") or socket.gethostname()
         return cls(
             x_base_url=config.X_BASE_URL,
-            group_id=config.GROUP_ID,
+            user_id=user_id,
             client_id=client_id,
             tunnel_secret=config.TUNNEL_SECRET,
             internal_llm_base=config.INTERNAL_LLM_BASE,
