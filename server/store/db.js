@@ -114,6 +114,13 @@ try {
   // Column already exists — ignore
 }
 
+// Add is_admin column to users if it doesn't exist (idempotent migration)
+try {
+  db.exec(`ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0`);
+} catch (_e) {
+  // Column already exists — ignore
+}
+
 // ── Providers seed ────────────────────────────────────────────────────────
 // On first startup (providers table empty), seed from env vars
 {
