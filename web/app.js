@@ -1,3 +1,47 @@
+// ── Auth ─────────────────────────────────────────────────────────────────────
+const TOKEN_KEY = 'ai_hub_token';
+
+function getToken() { return localStorage.getItem(TOKEN_KEY); }
+function setToken(t) { localStorage.setItem(TOKEN_KEY, t); }
+function clearToken() { localStorage.removeItem(TOKEN_KEY); }
+
+// Wrap fetch to add Authorization header when token is present
+const _fetch = window.fetch.bind(window);
+window.fetch = (url, opts = {}) => {
+  const token = getToken();
+  if (token) {
+    opts.headers = { ...(opts.headers ?? {}), Authorization: `Bearer ${token}` };
+  }
+  return _fetch(url, opts);
+};
+
+async function doLogin() {
+  const username = $('login-username').value.trim();
+  const password = $('login-password').value;
+  const errEl = $('login-error');
+  errEl.style.display = 'none';
+  try {
+    const res = await _fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    });
+    const body = await res.json();
+    if (!res.ok) { errEl.textContent = body.error ?? '登录失败'; errEl.style.display = 'block'; return; }
+    setToken(body.token);
+    $('login-overlay').style.display = 'none';
+    startApp();
+  } catch (e) {
+    errEl.textContent = '网络错误：' + e.message; errEl.style.display = 'block';
+  }
+}
+
+function setupLoginUI() {
+  $('login-overlay').style.display = 'flex';
+  $('login-btn').addEventListener('click', doLogin);
+  $('login-password').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+}
+
 // ── State ────────────────────────────────────────────────────────────────────
 let ws = null;
 let currentAgentId = null;
@@ -68,7 +112,9 @@ function flushQueue() {
 function connect(agentId) {
   if (ws) { ws.onclose = null; ws.close(); }
   currentAgentId = agentId;
-  ws = new WebSocket(`${WS_URL}?agentId=${agentId}`);
+  const token = getToken();
+  const wsUrl = token ? `${WS_URL}?agentId=${agentId}&token=${encodeURIComponent(token)}` : `${WS_URL}?agentId=${agentId}`;
+  ws = new WebSocket(wsUrl);
   ws.addEventListener('open', () => { setConn(true); flushQueue(); setTimeout(doFit, 100); });
   ws.addEventListener('close', () => {
     setConn(false);
@@ -556,10 +602,26 @@ document.getElementById('gen-zip-btn').addEventListener('click', async () => {
 });
 
 // ── Init ──────────────────────────────────────────────────────────────────────
-initTerminal();
-loadAgents().then(agents => {
-  if (!agents) return;
-  const first = agents.find(a => a.alive) ?? agents[0];
-  if (first) switchAgent(first.id, first);
-});
-setInterval(loadAgents, 10000);
+function startApp() {
+  // Logout button
+  const btnLogout = document.getElementById('btn-logout');
+  if (btnLogout) btnLogout.addEventListener('click', () => { clearToken(); location.reload(); });
+
+  initTerminal();
+  loadAgents().then(agents => {
+    if (!agents) return;
+    const first = agents.find(a => a.alive) ?? agents[0];
+    if (first) switchAgent(first.id, first);
+  });
+  setInterval(loadAgents, 10000);
+}
+
+// Check auth: if no token or token invalid, show login; else start app
+(async () => {
+  const token = getToken();
+  if (!token) { setupLoginUI(); return; }
+  // Verify token is still valid
+  const res = await _fetch('/api/agents', { headers: { Authorization: `Bearer ${token}` } });
+  if (res.status === 401) { clearToken(); setupLoginUI(); return; }
+  startApp();
+})();

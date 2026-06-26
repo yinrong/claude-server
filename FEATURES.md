@@ -163,6 +163,7 @@
 | AU6 | 管理员用户管理 API | GET/POST /api/admin/users，PATCH /api/admin/users/:id/password，DELETE /api/admin/users/:id | ✅ | AU6-T1~T4 |
 | AU7 | /admin 管理页面 | 纯静态 HTML，列出用户、添加用户、修改密码、删除用户 | ✅ | AU7-smoke |
 | AU8 | 超级管理员可正常登录使用 | 与普通用户相同的登录和 agent 操作流程 | ✅ | AU8-T1 |
+| AU9 | 主界面登录流程 | 无 token 时显示登录框；登录成功后 token 存 localStorage，所有 API/WS 请求携带 token | ✅ | AU9-T1 |
 
 ---
 

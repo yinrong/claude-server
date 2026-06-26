@@ -149,3 +149,15 @@ test('AU8-T1: super admin can create and list agents', async ({ baseURL }) => {
   const agents = await listRes.json();
   expect(agents.some(a => a.name === 'AdminAgent')).toBe(true);
 });
+
+// ── AU9: Main UI login flow ───────────────────────────────────────────────────
+// Verifies the main HTML page contains the login overlay element
+test('AU9-T1: main page HTML contains login overlay for unauthenticated users', async ({ baseURL }) => {
+  const res = await fetch(`${baseURL}/`);
+  expect(res.status).toBe(200);
+  const html = await res.text();
+  // The page must include a login overlay so users can authenticate
+  expect(html).toContain('login-overlay');
+  expect(html).toContain('login-username');
+  expect(html).toContain('login-password');
+});

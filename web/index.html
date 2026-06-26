@@ -14,7 +14,10 @@
   <aside id="sidebar">
     <div id="sidebar-header">
       <span class="logo">⚡ Claude Hub</span>
-      <button id="btn-new-agent" title="New Agent">＋</button>
+      <div style="display:flex;gap:4px">
+        <button id="btn-new-agent" title="New Agent">＋</button>
+        <button id="btn-logout" class="icon-btn" title="退出登录" style="font-size:14px">⎋</button>
+      </div>
     </div>
     <div id="agent-list-wrap">
       <ul id="agent-list"></ul>
@@ -125,6 +128,17 @@
   </div>
   <div id="file-panel-list"></div>
   <pre id="file-panel-content" class="hidden"></pre>
+</div>
+
+<!-- Login overlay -->
+<div id="login-overlay" style="display:none;position:fixed;inset:0;background:#1e1e2e;z-index:999;display:flex;align-items:center;justify-content:center">
+  <div style="background:#181825;border:1px solid #313244;border-radius:12px;padding:36px;width:320px">
+    <h2 style="color:#cba6f7;margin-bottom:20px;text-align:center">⚡ Claude Hub</h2>
+    <input id="login-username" type="text" placeholder="用户名" style="display:block;width:100%;margin-bottom:12px;background:#11111b;border:1px solid #313244;color:#cdd6f4;padding:10px 14px;border-radius:6px;font-size:14px;box-sizing:border-box" />
+    <input id="login-password" type="password" placeholder="密码" style="display:block;width:100%;margin-bottom:16px;background:#11111b;border:1px solid #313244;color:#cdd6f4;padding:10px 14px;border-radius:6px;font-size:14px;box-sizing:border-box" />
+    <button id="login-btn" style="width:100%;background:#cba6f7;color:#1e1e2e;border:none;border-radius:6px;padding:10px;font-size:14px;font-weight:600;cursor:pointer">登录</button>
+    <p id="login-error" style="color:#f38ba8;font-size:13px;margin-top:10px;text-align:center;display:none"></p>
+  </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.min.js"></script>
